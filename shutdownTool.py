@@ -29,14 +29,14 @@ class ShutdownTool:
         self.ui.pBTN_Reset.clicked.connect(self.reset_countdown)#重置倒计时
         self.ui.DebugSwtich.stateChanged.connect(self.debug_on_off)#打开/关闭调试
 
-    def shutdown_now(self):
+    def shutdown_now(self)->None:
         #立即关机
         if not self.debug:
             system("shutdown /s /t 0")
         else:
             print("立即关机")
 
-    def shutdown_later(self):
+    def shutdown_later(self)->None:
         #倒计时关机
         self.ui.pBTN_ShutdownLater.setEnabled(False)
         self.ui.pBTN_SleepLater.setEnabled(False)
@@ -49,14 +49,14 @@ class ShutdownTool:
             else:
                 print("倒计时关机")
 
-    def sleep_now(self):
+    def sleep_now(self)->None:
         #立即休眠
         if not self.debug:
             system("shutdown /h")
         else:
             print("立即休眠")
 
-    def sleep_later(self):
+    def sleep_later(self)->None:
         #倒计时休眠
         self.ui.pBTN_ShutdownLater.setEnabled(False)
         self.ui.pBTN_SleepLater.setEnabled(False)
@@ -69,14 +69,14 @@ class ShutdownTool:
             else:
                 print("倒计时休眠")
 
-    def restart_now(self):
+    def restart_now(self)->None:
         #立即重启
         if not self.debug:
             system("shutdown /r /t 0")
         else:
             print("立即重启")
 
-    def restart_later(self):
+    def restart_later(self)->None:
         #倒计时重启
         self.ui.pBTN_ShutdownLater.setEnabled(False)
         self.ui.pBTN_SleepLater.setEnabled(False)
@@ -89,7 +89,7 @@ class ShutdownTool:
             else:
                 print("倒计时重启")
 
-    def reset_countdown(self):
+    def reset_countdown(self)->None:
         #重置倒计时
         self.countdown = 0              #倒计时清零
         self.countdown_switch = False   #关闭倒计时开关
@@ -98,7 +98,7 @@ class ShutdownTool:
         self.ui.pBTN_ReStartLater.setEnabled(True)
         print("重置倒计时")
 
-    def get_countdown(self):
+    def get_countdown(self)->None:
         #获取倒计时
         countdown_cbox = self.ui.cBOX_CountDown.currentText()   #下拉框的倒计时
         countdown_text = self.ui.spinBox_CountDown.value()      #数字框的倒计时，本来就是int类型
@@ -117,7 +117,7 @@ class ShutdownTool:
         #打开倒计时开关
         self.countdown_switch = True
 
-    def count_down(self):
+    def count_down(self)->None:
         #倒计时
         start_time = time.time()  # 获取当前时间（以秒为单位）
         self.get_countdown()  # 获取倒计时的值
@@ -127,7 +127,7 @@ class ShutdownTool:
             if elapsed_time >= self.countdown * 60:
                 break  # 如果经过时间大于或等于分钟数*60，则退出循环
 
-    def debug_on_off(self):
+    def debug_on_off(self)->None:
         #打开和关闭调试
         if self.ui.DebugSwtich.isChecked():
             self.debug = True
@@ -137,7 +137,7 @@ class ShutdownTool:
             self.ui.DebugSwtich.setText("调试已关闭")
 
     @staticmethod
-    def show_warning_message(msg):
+    def show_warning_message(msg: str) ->None:
         msg_box = QMessageBox()
         msg_box.setWindowTitle("提示")
         msg_box.setText(msg)
