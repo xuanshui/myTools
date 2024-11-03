@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QApplication,QMessageBox
 from PySide6.QtUiTools import QUiLoader #UI加载工具
 # from PySide6.QtCore import QTime,QFile  #实现倒计时
-import time
+import time #实现倒计时
 import sys
 from os import system   #关机、重启、休眠
 
