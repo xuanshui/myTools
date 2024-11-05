@@ -1,11 +1,12 @@
 from ctypes import *
 from win32com.client import Dispatch
 from Settings_WuJie14X import *
+# from Settings_Server import *
 
 # 加载免注册dll
-dll = windll.LoadLibrary("E:/Code/Python/Test/op-0.4.5_with_model/tools.dll")
+dll = windll.LoadLibrary(path_tools_dll)
 # 调用setupW函数
-result = dll.setupW("E:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll")
+result = dll.setupW(path_opx64_dll)
 
 # 如果result不等于1,则执行失败
 if result != 1:

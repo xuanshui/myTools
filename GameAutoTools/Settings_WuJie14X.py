@@ -1,5 +1,6 @@
 #本文件是一些参数设置
-
+path_tools_dll = "E:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
+path_opx64_dll = "E:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
 #代码流程控制相关的参数
 class CodeControl:
     loop_count = 3    #主循环次数，即游戏的场数
