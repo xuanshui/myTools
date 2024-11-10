@@ -1,21 +1,30 @@
+import pyautogui
+import ctypes
 from ctypes import *
 from win32com.client import Dispatch
 from Settings_WuJie14X import *
+import logging  #日志记录
+import random
 # from Settings_Server import *
+
+#调整日志记录形式：以文本形式记录
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+log_file_name = "log.txt"
+log_file_handler = logging.FileHandler(log_file_name, encoding='GBK')   #GB18030
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT, handlers={log_file_handler})
+# logging.basicConfig(filename=log_file_name, level=logging.DEBUG, format=LOG_FORMAT)
 
 # 加载免注册dll
 dll = windll.LoadLibrary(path_tools_dll)
 # 调用setupW函数
 result = dll.setupW(path_opx64_dll)
+#开启DPI感知
+ctypes.windll.user32.SetProcessDPIAware()
 
 # 如果result不等于1,则执行失败
 if result != 1:
+    logging.critical("\n\nOP插件免注册dll加载失败！脚本已退出。\n\n")
     exit(0)
-# 创建对象
-op = Dispatch("op.opsoft")
-# print version of op 打印op插件的版本
-print(op.Ver())
-print(op.GetPath())
 
 
 class Point:
@@ -71,16 +80,43 @@ class Automation:
         self.hwnd = 0  # 窗口句柄
         self.send_hwnd = 0
         self.UI = game_info.UI_Err    #游戏的界面类型，-1为非法值表示未获取到界面信息
-        self.real_screen_resolution = [1440,900]    #实际的屏幕分辨率，该参数可以修改
-        self.ratio_screen = 2 #屏幕物理分辨率/窗口矩形分辨率 = 比例，该参数可以修改
-        print("初始化成功init")
-
-    # 基础设置
-    def set_base(self):
-        # 输出插件版本号
-        print("op ver:", self.op.Ver())
-        print("path:", self.op.GetPath())  # 获取全局路径
+        # self.real_screen_resolution = [1440,900]    #实际的屏幕分辨率，该参数可以修改
+        self.clientArea = []
+        self.clientSize = []
+        self.Ratio = 2 #屏幕物理分辨率/窗口矩形分辨率 = 比例，该参数可以修改
         self.op.SetShowErrorMsg(2)  # 设置是否弹出错误信息,默认是打开：0:关闭，1:显示为信息框，2:保存到文件,3:输出到标准输出
+
+        self.holdTime = 0   #一局内的蓄力次数
+        self.gameTime = 0   #游戏次数
+
+        logging.info("\n\n——————————————————————————————————————————————————————————————————————————————————————")
+        logging.info(f"OP插件版本：{self.op.Ver()}") # 输出插件版本号
+        logging.info(f"OP插件工作目录：：{self.op.GetPath()}") # 获取全局路径
+        logging.info("脚本初始化成功！")
+
+    # 基础测试
+    def base_test(self)->bool:
+        tmpArea = self.clientArea
+        newPoint = [int((tmpArea[0] + tmpArea[2]) / 2), int((tmpArea[1] + tmpArea[3]) / 2)]
+        # 移动鼠标到区域的中间：还要换算倍数，不能指哪打哪
+        if self.op.MoveTo(newPoint[0] / self.Ratio, newPoint[1] / self.Ratio) == 1:
+            logging.info(f"鼠标调试：移动鼠标成功")
+        else:
+            logging.info(f"鼠标调试：移动鼠标失败")
+            return False
+        # 获取鼠标坐标
+        tmp_cur_pos = self.op.GetCursorPos()  # 该函数返回了一个三元素的元组
+        if tmp_cur_pos[0] != 1:  # 获取鼠标平面坐标失败，直接退出
+            logging.error(f"获取鼠标平面坐标失败，无法进行自动化操作。{tmp_cur_pos}")
+            return False
+        else:
+            cur_pos = tmp_cur_pos[1:]  # 鼠标当前位置
+            if cur_pos[0] != newPoint[0] and cur_pos[1] != newPoint[1]:
+                logging.info(f"鼠标移动调试失败！")
+                return False
+            else:
+                logging.error(f"鼠标移动调试成功")
+                return True
 
     def clear_window(self):
         self.op.UnBindWindow()
@@ -92,21 +128,47 @@ class Automation:
     # 非0：获取成功，返回窗口句柄。0：获取失败
     def get_window_by_name(self, cur_window_name):
         # 测试窗口接口
-        self.hwnd = op.FindWindow("", cur_window_name)  # 通过窗口名称查找窗口句柄
+        self.hwnd = self.op.FindWindow("", cur_window_name)  # 通过窗口名称查找窗口句柄
         if self.hwnd != 0:
-            print(f"找到窗口：{cur_window_name}，parent hwnd:{self.hwnd}")
+            logging.info(f"找到窗口：{cur_window_name}，parent hwnd:{self.hwnd}")
             # print(self.op.GetClientRect(self.hwnd))
-            # print(self.op.GetWindowRect(self.hwnd))
-            print(self.op.GetClientSize(self.hwnd))
-            if self.op.GetWindowRect(self.hwnd)[0] != 0 :
-                self.real_screen_resolution = self.op.GetWindowRect(self.hwnd)[1:]  #获取实际的屏幕分辨率
-                self.ratio_screen = int(UI_info.physical_screen_resolution[0] / self.real_screen_resolution[2])#获取比例
-            send_hwnd = op.FindWindowEx(self.hwnd, "Edit", "")  # 通过父窗口找子窗口，从而进行字符串输入
-            if send_hwnd != 0:
-                print(f"找到子窗口child hwnd:{send_hwnd}")
+            # 移动窗口到左上角
+            # self.op.SetClientSize(self.hwnd, 0, 0)
+
+            #注意：GetClientRect和GetWindowRect得到的尺寸是不一样的。Clien只包含游戏主界面，Window还包含更多。
+            #例如永劫无间的“窗口化”模式，Window尺寸(0, 0, 1306, 791)，Client尺寸(0, 0, 1280, 720)
+            #例如永劫无间的“无边框窗口”模式，Window尺寸(0, 0, 1282, 722)，Client尺寸(0, 0, 1280, 720)
+            tmpArea = self.op.GetClientRect(self.hwnd)
+            #tmpArea = self.op.GetWindowRect(self.hwnd)
+            if tmpArea[0] == 1:
+                if self.op.SetClientSize(self.hwnd, 1280,720) == 1:
+                    self.clientSize = self.op.GetClientSize(self.hwnd)[1:]
+                    logging.info(f"设置窗口尺寸成功：{self.clientSize}")
+                    # 设置窗口尺寸后，需要重新移动窗口
+                    #if self.op.MoveWindow(self.hwnd, -13, -58):  # 移动窗口到左上角
+                    if self.op.MoveWindow(self.hwnd, -1, -1):  # 移动窗口到左上角。注意
+                        logging.info("移动窗口到左上角成功")
+                    else:
+                        logging.warning("移动窗口到左上角失败")
+                    tmpArea = self.op.GetClientRect(self.hwnd)
+                    self.clientArea = tmpArea[1:]
+                    logging.info(f"获取窗口坐标成功：{self.clientArea}")
+                else:
+                    logging.error(f"设置窗口尺寸失败")
+            else:
+                logging.error(f"获取窗口尺寸失败")
+
+
+            # print(self.op.GetClientSize(self.hwnd))
+            # if self.op.GetWindowRect(self.hwnd)[0] != 0 :
+            #     self.real_screen_resolution = self.op.GetWindowRect(self.hwnd)[1:]  #获取实际的屏幕分辨率
+            #     self.ratio_screen = int(UI_info.physical_screen_resolution[0] / self.real_screen_resolution[2])#获取比例
+            # send_hwnd = self.op.FindWindowEx(self.hwnd, "Edit", "")  # 通过父窗口找子窗口，从而进行字符串输入
+            # if send_hwnd != 0:
+            #     print(f"找到子窗口child hwnd:{send_hwnd}")
             return self.hwnd
         else:
-            print(f"未找到窗口：{cur_window_name}")
+            logging.error(f"未找到窗口：{cur_window_name}")
             return 0
 
     # 绑定窗口hwnd，方便后面进行后台操作、获取相对坐标位置
@@ -118,114 +180,348 @@ class Automation:
         # 绑定之后,所有的坐标都相对于窗口的客户区坐标(不包含窗口边框)
         r = self.op.BindWindow(self.hwnd, "normal", "normal", "normal", 0)
         if r == 0:
-            print(f"绑定窗口{window_name}失败。bind false")
+            logging.warning(f"绑定窗口{window_name}失败。bind false")
         else:
-            print(f"成功绑定窗口{window_name}")
+            logging.info(f"成功绑定窗口{window_name}")
         return r
 
     # 自动化操作
     def auto_play(self, range_r:int) -> int:
-        #1、窗口激活，获取窗口4点坐标
-        print(self.op.SetWindowState(self.hwnd,1))  #激活窗口，显示到前台
-        tmp_area = self.op.GetWindowRect(self.hwnd) #返回5个参数，第一个是0（失败）或1（成功）
-        if tmp_area[0] != 1 : #获取窗口4点坐标失败，直接退出
-            #【出口】1
-            print(f"获取窗口4点坐标失败，无法进行自动化操作。{tmp_area}")
-            #return -1
-        window_area = tmp_area[1:]  # 窗口的4点区域坐标
-        print("窗口的4点区域坐标：", window_area)
-        # 移动鼠标到区域的中间
-        self.op.MoveTo((window_area[0] + window_area[2]) / 2, (window_area[1] + window_area[3]) / 2)
-
-        #2、移动窗口到左上角
-        # self.op.SetClientSize(self.hwnd, 0, 0)
-        if self.op.MoveWindow(self.hwnd, 0, 0): #移动窗口到左上角
-            print("移动窗口到左上角")
+        #1、窗口激活
+        if self.op.SetWindowState(self.hwnd,1) == 1:  #激活窗口，显示到前台
+            logging.info(f"激活窗口成功")
         else:
-            print("移动窗口到左上角失败")
+            logging.error(f"激活窗口失败")
 
-        #3、获取鼠标坐标
-        tmp_cur_pos = self.op.GetCursorPos()  # 该函数返回了一个三元素的元组
-        if tmp_cur_pos[0] != 1:  #获取鼠标平面坐标失败，直接退出
-            # 【出口】2
-            print(f"获取鼠标平面坐标失败，无法进行自动化操作。{tmp_cur_pos}")
-            # return -2
-        cur_pos = tmp_cur_pos[1:]  # 鼠标当前位置
-
-        #4、主循环
+        #2、主循环
         count = 0
-        while count < code_control.loop_count:  #循环次数
+        while True:  #循环次数
+        # while count < code_control.loop_count:  # 循环次数
             count += 1  #计数器自增
             #获取当面界面信息，频率：1次/秒
+            self.op.Sleep(1000)
+
             self.UI = self.get_cur_UI()
+
             # 主界面
-            if self.UI == game_info.UI_PVP_Main:
-                print("进入主界面")
+            if self.UI == game_info.UI_PVP_Main_Prepare:
+                logging.info("【进入主界面：未点击“开始游戏”】")
+                if self.MoveToAreaRandom(UIInfo.UI_main_area):
+                    if self.LeftClick():
+                        self.gameTime += 1
+                        logging.info("主界面：点击“开始游戏”成功")
 
             # 选择英雄界面
             elif self.UI == game_info.UI_PVP_Select_Hero:
-                pass
+                logging.info("【进入英雄选择界面：】")
+                if self.MoveToAreaRandom(UIInfo.UI_Select_cur_hero):
+                    if self.LeftClick():
+                        logging.info("英雄选择界面：点击“使用”成功")
+                    else:
+                        logging.error("英雄选择界面：点击“使用”失败")
+                else:
+                    logging.error("英雄选择界面：移动鼠标到“使用”失败")
+
             # 选择跳点界面
             elif self.UI == game_info.UI_PVP_Select_Point:
+                #不选跳点，随机跳点，等待进入游戏
                 pass
+
+            # 游戏内界面：未死亡
+            elif self.UI == game_info.UI_PVP_Game_in:
+                #重复进行空手右键蓄力
+                self.holdTime = 0
+                logging.info("【进入游戏局内界面：】")
+                if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                    if self.RightHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
+                        logging.info("游戏局内界面：使用右键蓄力成功")
+
+            # 游戏内界面：死亡，待返魂
+            elif self.UI == game_info.UI_PVP_Game_dad:
+                # 重复进行跳跃
+                logging.info("【进入游戏局内界面：死亡，待返魂】")
+
             # 结算界面1
             elif self.UI == game_info.UI_PVP_Game_End1:
-                pass
+                #后续：OCR识别获取击败数量
+                logging.info("【进入结算界面1：】")
+                if self.MoveToAreaRandom(UIInfo.UI_end_area1):
+                    if self.LeftClick():
+                        logging.info("击败数量：")
+
+
             # 结算界面2
             elif self.UI == game_info.UI_PVP_Game_End2:
-                pass
-            # 游戏内界面
-            elif self.UI == game_info.UI_PVP_Game_in:
-                pass
+                #后续：OCR识别获取增加的经验
+                logging.info("【进入结算界面2：】")
+                if self.MoveToAreaRandom(UIInfo.UI_end_area1):
+                    if self.LeftClick():
+                        logging.info("增加经验：")
+
             # 非法界面
             else:
                 #不是上面的界面，则认为是错误界面信息，重新获取界面类型
                 pass
-            #1-判断当前界面
 
+        return 1
+
+    #移动鼠标到目标位置
+    def MoveTo(self, dstPoint:list[2])->bool:
+        self.op.Sleep(code_control.Move_sleep)
+        if self.op.MoveTo(dstPoint[0] / self.Ratio, dstPoint[1] / self.Ratio) == 1:
+            # logging.info(f"移动鼠标成功，目标地址：{dstPoint}")
+            return True
+        else:
+            logging.warning(f"移动鼠标失败！目标位置：{dstPoint}，当前位置：{self.op.GetCursorPos()[1:]}")
+            return False
+
+    #移动鼠标到目标位置附近范围的随机一个地方，随机的范围可以设置
+    def MoveToRandom(self, dstPoint:list[2])->bool:
+        self.op.Sleep(code_control.Move_sleep)
+        newDstPoint = self.op.MoveToEx(dstPoint[0] / self.Ratio, dstPoint[1] / self.Ratio,
+                            code_control.Random_range_x, code_control.Random_range_y)
+        if newDstPoint != "":
+            # logging.info(f"移动鼠标成功，目标地址：({newDstPoint})")
+            return True
+        else:
+            logging.warning(f"随机移动鼠标失败！目标位置：{dstPoint}附近随机范围，当前位置：{self.op.GetCursorPos()[1:]}")
+            return False
+
+    # 移动鼠标到目标区域内的随机一个地方
+    def MoveToAreaRandom(self, dstArea: list[4]) -> bool:
+        self.op.Sleep(code_control.Move_sleep)
+        randomX = random.randint(int(dstArea[0]),int(dstArea[2]))
+        randomY = random.randint(int(dstArea[1]),int(dstArea[3]))
+        newDstPoint = [randomX, randomY]
+        # curDstPoint = self.op.GetCursorPos()[1:]  # 移动前鼠标位置
+        ret = self.op.MoveTo(newDstPoint[0] / self.Ratio, newDstPoint[1] / self.Ratio)
+        curDstPoint2 = self.op.GetCursorPos()[1:]  # 移动后鼠标位置
+        if self.InArea(curDstPoint2, dstArea):
+            if ret != 0:
+                # logging.info(f"移动鼠标成功，目标地址：({newDstPoint})")
+                return True
+            else:
+                logging.warning(f"随机移动鼠标失败！目标区域：{dstArea}范围内随机位置，当前位置：{curDstPoint2}")
+                return False
+        else:
+            logging.warning(f"随机移动鼠标超范围！目标区域：{dstArea}范围内随机位置，当前位置：{curDstPoint2}")
+            return False
+
+    def InArea(self,curPoint:list[2],curArea:list[4])->bool:
+        if curArea[0] <= curPoint[0] <= curArea[2]:
+            if curArea[1] <= curPoint[1] <= curArea[3]:
+                return True
+        return False
+
+    #单击一下鼠标左键
+    def LeftClick(self)->bool:
+        self.op.Sleep(code_control.Click_sleep)
+        if self.op.LeftClick() == 1:
+            # logging.info(f"点击鼠标左键成功，点击位置：{self.op.GetCursorPos()[1:]}")
+            return True
+        else:
+            logging.warning(f"点击鼠标左键失败")
+            return False
+
+    # 单击一下鼠标右键
+    def RightClick(self) -> bool:
+        self.op.Sleep(code_control.Click_sleep)
+        if self.op.RightClick() == 1:
+            # logging.info(f"点击鼠标左键成功，点击位置：{self.op.GetCursorPos()[1:]}")
+            return True
+        else:
+            logging.warning(f"点击鼠标左键失败")
+            return False
+
+    #按下鼠标左键一段时间，然后抬起
+    def LeftHold(self,holdTime:int)->bool:
+        self.op.Sleep(code_control.Click_sleep)
+        if self.op.LeftDown() == 1:
+            self.op.Sleep(holdTime)
+            if self.op.LeftUp() == 1:
+                # logging.info(f"按下并抬起鼠标左键成功，点击位置：{self.op.GetCursorPos()[1:]}")
+                return True
+            else:
+                logging.warning(f"抬起鼠标左键失败")
+                return False
+        else:
+            logging.warning(f"按下鼠标左键失败")
+            return False
+
+    # 按下鼠标右键一段时间，然后抬起
+    def RightHold(self, holdTime: int) -> bool:
+        self.op.Sleep(code_control.Click_sleep)
+        if self.op.RightDown() == 1:
+            self.op.Sleep(holdTime)
+            if self.op.RightUp() == 1:
+                # logging.info(f"按下并抬起鼠标右键成功，点击位置：{self.op.GetCursorPos()[1:]}")
+                return True
+            else:
+                logging.warning(f"抬起鼠标右键失败")
+                return False
+        else:
+            logging.warning(f"按下鼠标右键失败")
+            return False
 
     def get_cur_UI(self)->int:
         #是否为主界面：
-        if self.get_area_text(UI_info.UI_main_area) == UI_info.UI_main_text1 or self.get_area_text(UI_info.UI_main_area) == UI_info.UI_main_text2:
-            return game_info.UI_PVP_Main
-        self.op.Sleep(code_control.OCR_sleep)
-        #是否为英雄选择界面
-        if self.get_area_text(UI_info.UI_select_hero_area) == UI_info.UI_select_hero_text:
-            return game_info.UI_PVP_Select_Hero
-        self.op.Sleep(code_control.OCR_sleep)
-        # 是否为跳点选择界面：龙隐洞天/聚窟州
-        if self.get_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text1 or self.get_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text2:
-            return game_info.UI_PVP_Select_Point
-        self.op.Sleep(code_control.OCR_sleep)
-        # 是否为结算界面，两个结算画面的特征其实都一样，这里就返回UI_PVP_Game_End1
-        if self.get_area_text(UI_info.UI_end_area1) == UI_info.UI_end_text1 or self.get_area_text(UI_info.UI_end_area2) == UI_info.UI_end_text2:
-            return game_info.UI_PVP_Game_End1
-        self.op.Sleep(code_control.OCR_sleep)
-        # 是否为游戏内界面
-        if self.get_area_text(UI_info.UI_game_area) == UI_info.UI_game_text:
-            return game_info.UI_PVP_Game_in
-        #不符合任何一个特征，就算错误
+
+        # # #通过查找屏幕截图中是否存在特征图片，来判断模式
+        # findPicRlt = self.findPic("/Pic/PVP_Main_UI_Start_BTN.bmp", 0.9)
+        # if findPicRlt[0] != -1:
+        #     logging.info(f"get_cur_UI：找到图片PVP_Main_UI_Start_BTN.bmp左上角坐标：{findPicRlt[1:]}")
+        # else:
+        #     logging.warning("get_cur_UI：未找到图片左上角坐标：/Pic/PVP_Main_UI_Start_BTN.bmp")
+        #
+        # # return 1
+
+        #先截图屏幕指定区域，再OCR识别指定区域文字来判断
+        self.op.Sleep(code_control.Common_sleep);
+        picFullName ="/Pic/tmpScreen.bmp"
+
+        # 是否为主界面？
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_main_area, picFullName) :   #如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_main_text1 :
+                logging.info(f"get_cur_UI：OCR识别到进入主界面：未开始")
+                return game_info.UI_PVP_Main_Prepare
+            else:
+                if self.ocr_pic_text(picFullName) == UI_info.UI_main_text2:
+                    logging.info(f"get_cur_UI：OCR识别到进入主界面：已开始，正在匹配")
+                    return game_info.UI_PVE_Main_Enter
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_main_area}失败。")
+
+        # 是否为英雄选择界面？
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_select_hero_area, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_select_hero_text:
+                logging.info(f"get_cur_UI：OCR识别到进入英雄选择界面")
+                return game_info.UI_PVP_Select_Hero
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_select_hero_text}失败。")
+
+        # 是否为跳点选择界面：聚窟州？
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_select_point_area, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_select_point_text1:
+                logging.info(f"get_cur_UI：OCR识别到进入跳点选择界面：{UI_info.UI_select_point_text1}")
+                return game_info.UI_PVP_Select_Point
+            # elif self.ocr_pic_text(picFullName) == UI_info.UI_select_point_text2:
+            #     logging.info(f"get_cur_UI：OCR识别到进入跳点选择界面：{UI_info.UI_select_point_text2}")
+            #     return game_info.UI_PVP_Select_Point
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_select_point_area}失败。")
+
+        # 是否为结算界面？
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_end_area1, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_end_text1:
+                if self.captureArea(UI_info.UI_end_area2, picFullName):  # 如果截图指成功
+                    if self.ocr_pic_text(picFullName) == UI_info.UI_end_text2:
+                        logging.info(f"get_cur_UI：OCR识别到进入结算界面")
+                        return game_info.UI_PVP_Game_End1
+                else:
+                    logging.error(f"captureArea：截图区域{UI_info.UI_end_area2}失败。")
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_end_area1}失败。")
+
+        # 是否为游戏内界面，已死亡待返魂：特征：中间:有“进入返魂坛复活”的字样
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_game_dad, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_game_dad_text:
+                logging.info(f"get_cur_UI：OCR识别到进入游戏内界面：已死亡，待返魂")
+                return game_info.UI_PVP_Game_dad
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_game_area}失败。")
+
+        # 是否为游戏内界面，未死亡：特征1，左上角的“尚存”，特征2，左下角的角色名，特征3，中间没有“进入返魂坛复活”的字样
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_game_area, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_game_text:
+                logging.info(f"get_cur_UI：OCR识别到进入游戏内界面，特征字：{UI_info.UI_game_text}")
+                return game_info.UI_PVP_Game_in
+            self.op.Sleep(code_control.Common_sleep)
+            if self.captureArea(UI_info.UI_game_area2, picFullName):  # 如果截图指成功UI_game_area2
+                if self.ocr_pic_text(picFullName) == UI_info.UI_game_text2:
+                    logging.info(f"get_cur_UI：OCR识别到进入游戏内界面，特征字：{UI_info.UI_game_text2}")
+                    return game_info.UI_PVP_Game_in
+                else:
+                    logging.error(f"captureArea：截图区域{UI_info.UI_game_area}失败。")
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_game_area}失败。")
+
+
+        # 不符合任何一个特征，就算错误
         return game_info.UI_Err
 
-    #获取指定区域内的文字
-    def get_area_text(self, area)->str:
+        # if self.ocr_area_text(UI_info.UI_main_area) == UI_info.UI_main_text1 :
+        #     logging.info(f"get_cur_UI：OCR识别到进入主界面：未开始")
+        #     # return game_info.UI_PVP_Main_Prepare
+        # else:
+        #     if self.ocr_area_text(UI_info.UI_main_area) == UI_info.UI_main_text2:
+        #         logging.info(f"get_cur_UI：OCR识别到进入主界面：已开始，正在匹配")
+        #         # return game_info.UI_PVE_Main_Enter
+
+        # #是否为英雄选择界面
+        # if self.ocr_area_text(UI_info.UI_select_hero_area) == UI_info.UI_select_hero_text:
+        #     return game_info.UI_PVP_Select_Hero
+        #
+        # # 是否为跳点选择界面：龙隐洞天/聚窟州
+        # if self.ocr_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text1 or self.ocr_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text2:
+        #     return game_info.UI_PVP_Select_Point
+        #
+        # # 是否为结算界面，两个结算画面的特征其实都一样，这里就返回UI_PVP_Game_End1
+        # if self.ocr_area_text(UI_info.UI_end_area1) == UI_info.UI_end_text1 or self.ocr_area_text(UI_info.UI_end_area2) == UI_info.UI_end_text2:
+        #     return game_info.UI_PVP_Game_End1
+        #
+        # # 是否为游戏内界面
+        # if self.ocr_area_text(UI_info.UI_game_area) == UI_info.UI_game_text:
+        #     return game_info.UI_PVP_Game_in
+        # #不符合任何一个特征，就算错误
+        # return game_info.UI_Err
+
+    #在整个屏幕截图中查找指定图片的位置，每次查找耗时约110ms
+    def findPic(self, pic_name: str,sim:float) -> int:
+        area = self.clientArea
+        #有BUG，要么进行一次休眠，要么连续查找2次。否则会失败
+        self.op.Sleep(code_control.FindPic_sleep)
+        pos = self.op.FindPic(area[0], area[1],area[2], area[3],pic_name, "000000", sim, 0)
+        return pos
+
+    #对指定区域进行截图，如果截图成功则返回1，失败返回0：每次截图耗时约7ms～15ms
+    def captureArea(self,area:list[4],picFullName:str)->bool:
+        self.op.Sleep(code_control.Capture_sleep)
+        screenCapture = self.op.Capture(area[0], area[1], area[2],area[3],picFullName)
+        if screenCapture == 1:
+            return True
+        else :
+            return False
+
+    #获取指定区域内的文字：每次调用消耗时间：1035ms
+    def ocr_area_text(self, area)->str:
         self.op.Sleep(code_control.OCR_sleep);
         #对指定区域area进行OCR文字识别
-        text = self.op.OcrAuto(area[0]/self.ratio_screen, area[1]/self.ratio_screen, area[2]/self.ratio_screen,
-                               area[3]/self.ratio_screen, code_control.OCR_sim)
-        print(f"OCR识别：{text}")
+        text = self.op.OcrAuto(area[0], area[1], area[2], area[3], code_control.OCR_sim)
+        if text != "":
+            logging.info(f"get_area_text：OCR识别区域{area}成功：\n{text}")
+        else:
+            logging.info(f"get_area_text：OCR识别区域{area}失败。")
 
-        # ret = self.op.Capture(area[0]/self.ratio_screen, area[1]/self.ratio_screen, area[2]/self.ratio_screen,
-        #                       area[3]/self.ratio_screen, "tmp_screen1.bmp")
-        # if ret != 1:
-        #     print("截图失败1")
-        # ret = self.op.Capture(area[0], area[1], area[2],area[3], "tmp_screen2.bmp")
-        # if ret != 1:
-        #     print("截图失败2")
-        # ret = self.op.Capture(0, 0, 10000, 10000, "tmp_screen3.bmp")
-        # if ret != 1:
-        #     print("截图失败3")
         return text
+
+    # 获取指定区域内的文字：针对同一张图片，第一次调用耗时800ms，往后每次调用，耗时约30ms～40ms
+    def ocr_pic_text(self, picPath:str) -> str:
+        # 对指定区域area进行OCR文字识别
+        text = self.op.OcrFromFile(picPath,"9f2e3f-000000",code_control.OCR_sim)
+        if text != "":
+            # logging.info(f"get_pic_area_text：OCR识别图片{picPath}成功：\n{text}")
+            pass
+        else:
+            # logging.info(f"get_pic_area_text：OCR识别图片{picPath}失败。")
+            pass
+        return text
+
 
     def UI_main_fun(self):
         pass
@@ -248,21 +544,18 @@ class Automation:
             return -2
         cur_pos = tmp_cur_pos[1:]  # 鼠标当前位置
         self.op.LeftDown()  # 按下左键
-        self.op.Sleep(1000)
+
         self.op.MoveTo(cur_pos[0], cur_pos[1])
-        self.op.Sleep(1000)
+
         self.op.LeftUp()
         self.op.RightDown()
         self.op.RightUp()
 
     def auto_move_click(self):
         self.op.MoveTo(200, 200)
-        self.op.Sleep(200)
         self.op.LeftClick()
-        self.op.Sleep(1000)
         r = self.op.SendString(self.send_hwnd, "Hello World!")
         print("SendString ret:", r)
-        self.op.Sleep(1000)
         return 0
 
     def test_bkimage(self):
@@ -289,14 +582,26 @@ class Automation:
 def run_automation():
 
     auto = Automation()
-    auto.set_base()
     auto.get_window_by_name(window_name)
     if auto.bind_window() != 0 :    #绑定窗口成功的前提下才自动游戏
-        auto.auto_play(20)
+        if auto.base_test():
+            auto.auto_play(20)
     auto.clear_window() #脚本结束，释放窗口
 
 if __name__ == "__main__":
+    # 获取当前鼠标位置
+    print(pyautogui.position())
+    # 获取当前屏幕的分辨率
+    print(pyautogui.size())
+    # 判断某个坐标是否在屏幕上
+    print(pyautogui.onScreen(0,0))
+    pyautogui.PAUSE = 0.5
+    # pyautogui.click(2572,119)
+    # pyautogui.mouseUp()  # 释放鼠标按键（默认左键）
+    # pyautogui.click()
+
     window_name = "1-主界面_20241102.png（2879×1799像素, 2.21MB）- 2345看图王 - 第1/12张 100% "
+    window_name = "Naraka"        #NeacProtect  #Naraka
     code_control = CodeControl()
     game_info = GameInfo()
     UI_info = UIInfo()
