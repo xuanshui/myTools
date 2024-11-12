@@ -3,22 +3,38 @@ path_tools_dll = "D:/code/Python/Tools/op-0.4.5_with_model/tools.dll"
 path_opx64_dll = "D:/code/Python/Tools/op-0.4.5_with_model/op_x64.dll"
 #代码流程控制相关的参数
 class CodeControl:
+    clientWindowSize_X = 1280
+    clientWindowSize_Y = 720
+
     loop_count = 5    #主循环次数，即游戏的场数
 
     OCR_sim = 0.8       #OCR的相似度,取值范围 0.1-1.0
+    FindPic_sim = 0.9       #查找图片的相似度
+
+    #【说明】用户需要长按这个暂停键5秒以上，才能暂停脚本！
+    key_user_paused = 17    #用户输入该键，则休眠脚本30秒：目前是：Ctrl（需要长按Ctrl好几秒才行）
+    sleep_user_paused = 30000   #用户按下暂停键，则休眠30秒
+    sleep_after_start_game = 15000  #脚本点击“开始游戏”后，需要休眠的时间。如果不休眠，可能会导致一直点这个区域导致匹配失败。
+
+    sleep_main_cycle = 500  #主循环每500ms进行一次
 
     Common_sleep = 100  #各个普通操作之间的睡眠时间，100毫秒
-    OCR_sleep = 300     #每次进行OCR之前，休眠的时间
+    OCR_sleep = 200     #每次进行OCR之前，休眠的时间
     Capture_sleep = 200 #每次截屏前，休眠的时间
-    FindPic_sleep = 300 #每次查找图片前，休眠的时间
-    Move_sleep = 300    #每次移动鼠标前，休眠的时间
-    Click_sleep = 300  # 每次点击鼠标前，休眠的时间
+    FindPic_sleep = 200 #每次查找图片前，休眠的时间
+    Move_sleep = 100    #每次移动鼠标前，休眠的时间
+    Click_sleep = 100  # 每次点击鼠标前，休眠的时间
 
     Random_range_x = 10   #随机移动鼠标时，随机范围，单位：像素点
     Random_range_y = 10  # 随机移动鼠标时，随机范围，单位：像素点
 
     HoldTimeStart = 1100    #蓄力时间随机范围的最小值
     HoldTimeEnd = 5000      #蓄力时间随机范围的最大值
+
+class KeyCode:
+    ESC = 27
+    Cap = 20
+    Space = 32
 
 #游戏相关的信息：比如模式之类的
 class GameInfo:
@@ -33,6 +49,11 @@ class GameInfo:
     UI_PVP_Game_dad = 41    # 游戏内界面，死亡，待返魂
     UI_PVP_Game_End1 = 50    #结算界面1-击败信息：可以按下空格来跳过
     UI_PVP_Game_End2 = 51    #结算界面2-经验信息：可以按下空格来跳过
+
+    UI_Skip_Space = 100   #可以跳过的界面：空格跳过：skipPic1.bmp，skipPic2.bmp
+    UI_Skip_ESC = 101       #可以跳过的界面，ESC跳过：skipPic3.bmp
+
+    UI_Return_game = 120 #返回游戏：ReturnGame.bmp
 
 
 #无界14X屏幕原始分辨率：2880*1800
@@ -57,21 +78,34 @@ class UIInfo:
     UI_select_point_text1 = "聚窟州"
     # UI_select_point_text2 = "龙隐洞天"
 
-    UI_end_area1 = [542,661,581,684]
-    UI_end_text1 = "继续"
-    UI_end_area2 = [719,661,756,685]
-    UI_end_text2 = "分享"
+    # UI_end_area1 = [542,661,581,684]
+    # UI_end_text1 = "继续"
+    # UI_end_area2 = [719,661,756,685]
+    # UI_end_text2 = "分享"
+#============武道争锋START======================
+    UI_end_area1 = [807, 623, 899, 651]
+    UI_end_text1 = "返回大厅"
+    UI_end_area2 = [544,661,582,683]
+    UI_end_text2 = "继续"
 
-    UI_game_area = [34, 7, 65, 28]
-    UI_game_text = "尚存"
-    UI_game_area2 = [84,660,174,681]
+    UI_game_area = [35, 5, 67, 30]
+    UI_game_text = "排名"
+    UI_game_area2 = [84, 660, 174, 681]
     UI_game_text2 = "初代玄女顾清寒"
+# ============武道争锋END========================
 
-    UI_Random_left_move = [240,180,900,550]  #游戏局内时，鼠标在该区域随机移动
+    # UI_game_area = [34, 7, 65, 28]
+    # UI_game_text = "尚存"
 
-    UI_game_end1 = [489,268,535,294]
+
+    UI_Random_left_move = [240, 180, 900, 550]  #游戏局内时，鼠标在该区域随机移动
+
+    UI_game_end1 = [489, 268, 535, 294]
     UI_game_end1_text = "击败"
+    UI_game_end11 = [75,267,113,294]
+    UI_game_end11_text = "玩家"
     UI_end_kill_num = [488,314,534,343] #结算界面1-击败信息：OCR识别这个区域，能知道击败数量
+    UI_end_hurt_num = [657,316,707,345] #结算界面1-伤害信息，OCR识别该区域，能获取本局伤害值
 
     UI_game_end2 = [78, 266, 138, 292]
     UI_game_end2_text = "英雄印"
