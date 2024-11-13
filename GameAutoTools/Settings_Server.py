@@ -16,7 +16,7 @@ class CodeControl:
     sleep_user_paused = 30000   #用户按下暂停键，则休眠30秒
     sleep_after_start_game = 15000  #脚本点击“开始游戏”后，需要休眠的时间。如果不休眠，可能会导致一直点这个区域导致匹配失败。
 
-    sleep_main_cycle = 500  #主循环每500ms进行一次
+    sleep_main_cycle = 600  #主循环每600ms进行一次
 
     Common_sleep = 100  #各个普通操作之间的睡眠时间，100毫秒
     OCR_sleep = 200     #每次进行OCR之前，休眠的时间
@@ -47,13 +47,17 @@ class GameInfo:
     UI_PVP_Select_Point = 30 #选择界面：选择跳点
     UI_PVP_Game_in = 40      #游戏内界面
     UI_PVP_Game_dad = 41    # 游戏内界面，死亡，待返魂
-    UI_PVP_Game_End1 = 50    #结算界面1-击败信息：可以按下空格来跳过
-    UI_PVP_Game_End2 = 51    #结算界面2-经验信息：可以按下空格来跳过
+    UI_PVP_Game_End1 = 50    #结算界面2-击败信息：可以按下空格来跳过
+    UI_PVP_Game_End2 = 51    #结算界面3-段位信息：可以按下空格来跳过
+    UI_PVP_Game_End4 = 54   # 结算界面4-经验信息：先OCR获取通行证经验值，然后可以按下空格来跳过
 
     UI_Skip_Space = 100   #可以跳过的界面：空格跳过：skipPic1.bmp，skipPic2.bmp
     UI_Skip_ESC = 101       #可以跳过的界面，ESC跳过：skipPic3.bmp
 
     UI_Return_game = 120 #返回游戏：ReturnGame.bmp
+
+    EXE_MIN = 20    #一局无尽试炼，默认的通行证经验值范围：20～100
+    EXE_MAX = 100
 
 
 #无界14X屏幕原始分辨率：2880*1800
@@ -83,11 +87,28 @@ class UIInfo:
     # UI_end_area2 = [719,661,756,685]
     # UI_end_text2 = "分享"
 #============武道争锋START======================
+    #结算界面1：
+    #游戏会自动跳过该界面，脚本可以不用识别。
+
+    # 结算界面2：
     UI_end_area1 = [807, 623, 899, 651]
     UI_end_text1 = "返回大厅"
-    UI_end_area2 = [544,661,582,683]
+
+    # 结算界面3：
+    UI_end_area2 = [544, 661, 582, 683]
     UI_end_text2 = "继续"
 
+    # 结算界面4：
+    #如果识别到特征图片EXEUI_Pic.bmp或者OCR指定区域的文本是“恭喜获得”：就认为当前是结算界面4，在本界面可以OCR识别通行证经验值
+    UI_end_area4 = [591, 231, 695, 272]
+    UI_end_text4 = "恭喜获得"
+    UI_EXE_area_1 = [697, 373, 720, 393]    #如果是2位数的通行证经验，该区域是准确的
+    UI_EXE_area_2 = [688, 396, 735, 396]    #该区域的数字只有通行证经验，但是范围更广、背景更复杂，粗略级别。
+
+    # 结算界面5：
+    # 该界面是游戏等级经验，没什么用。
+
+    # 游戏内界面：
     UI_game_area = [35, 5, 67, 30]
     UI_game_text = "排名"
     UI_game_area2 = [84, 660, 174, 681]

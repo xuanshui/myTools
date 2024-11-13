@@ -304,39 +304,49 @@ class Automation:
             else:
                 self.windowState_active = False
 
-            if count % 5 == 0 : #每10个周期激活一次窗口
-                if not self.windowState_active:
+            if count % 5 == 0 : #每5个周期激活一次窗口。不能每个周期都检查，不然就没法关闭游戏了。
+                if not self.windowState_active: #如果当前不是激活状态
                     if self.op.SetWindowState(self.hwnd,1) == 1:  #激活窗口，显示到前台
                         logging.info(f"检测到窗口未激活，尝试激活窗口成功。")
                     else:
                         logging.error(f"检测到窗口未激活，尝试激活窗口失败！")
 
+            # 如果窗口尺寸发生变化，重新设置窗口尺寸
+            curWindowArea = self.op.GetWindowRect(self.hwnd)[1:]    #窗口尺寸
+            curClientArea = self.op.GetClientRect(self.hwnd)[1:]    #客户端尺寸
+            #如果window区域坐标或Client区域坐标发生任何变化，都重新设置窗口大小、位置
+            if (curWindowArea[0] != self.windowArea[0] or curWindowArea[1] != self.windowArea[1]
+                    or curWindowArea[2] != self.windowArea[2] or curWindowArea[3] != self.windowArea[3]
+                    or curClientArea[0] != self.clientArea[0] or curClientArea[1] != self.clientArea[1]
+                    or curClientArea[2] != self.clientArea[2] or curClientArea[3] != self.clientArea[3]):
+                self.set_window()
 
-            if count % 2 == 0:
-                # 如果窗口尺寸发生变化，重新设置窗口尺寸
-                curWindowArea = self.op.GetWindowRect(self.hwnd)[1:]    #窗口尺寸
-                curClientArea = self.op.GetClientRect(self.hwnd)[1:]    #客户端尺寸
-                #如果window区域坐标或Client区域坐标发生任何变化，都重新设置窗口大小、位置
-                if (curWindowArea[0] != self.windowArea[0] or curWindowArea[1] != self.windowArea[1]
-                        or curWindowArea[2] != self.windowArea[2] or curWindowArea[3] != self.windowArea[3]
-                        or curClientArea[0] != self.clientArea[0] or curClientArea[1] != self.clientArea[1]
-                        or curClientArea[2] != self.clientArea[2] or curClientArea[3] != self.clientArea[3]):
-                    self.set_window()
-                #获取当前界面
-                self.UI = self.get_cur_UI()
+            #获取当前界面
+            self.UI = self.get_cur_UI()
 
-            # 主界面
+            # 主界面-未点击“开始游戏”
             if self.UI == game_info.UI_PVP_Main_Prepare:
                 # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
                 self.UserPause()
                 logging.info("【进入主界面：未点击“开始游戏”】")
                 if self.MoveToAreaRandom(UIInfo.UI_main_area):
                     if self.LeftClick():
-                        self.gameTime += 1
+                        # self.gameTime += 1 #这里获取游戏次数不对，因为可能存在匹配失败，多次点击“开始游戏”的情况
                         logging.info("主界面：点击“开始游戏”成功")
                         logging.info(f"【【游戏局数：{self.gameTime }】】")
-                        # 点击开始后进入游戏，休眠等15秒进游戏
+                        # 点击开始后进入游戏，休眠等15秒进游戏：尝试匹配15秒
                         self.op.Sleep(code_control.sleep_after_start_game)
+
+            # 主界面：正在匹配：匹配过久则取消匹配。
+            if self.UI == game_info.UI_PVE_Main_Enter:
+                # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
+                self.UserPause()
+                logging.info("【进入主界面：正在匹配】")
+                if self.MoveToAreaRandom(UIInfo.UI_main_area):
+                    if self.LeftClick():
+                        # self.gameTime += 1 #这里获取游戏次数不对，因为可能存在匹配失败，多次点击“开始游戏”的情况
+                        logging.warning(f"主界面：等待{code_control.sleep_after_start_game}"
+                                     f"秒后游戏未开始，认为匹配失败，取消匹配，等待下一次脚本点击“开始游戏”")
 
 
             # 选择英雄界面
@@ -382,15 +392,10 @@ class Automation:
                 # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
                 self.UserPause()
                 #后续：OCR识别获取击败数量
-                logging.info("【进入结算界面1：】")
+                logging.info("【进入结算界面2：】")
                 if self.MoveToAreaRandom(UIInfo.UI_end_area1):
-                    picFullName = "/Pic/tmpScreen.bmp"
-                    self.op.Sleep(code_control.Capture_sleep)
-                    if self.captureArea(UI_info.UI_end_hurt_num, picFullName) :
-                        hurt =  self.ocr_pic_text(picFullName)
-                        logging.info(f"结算界面1-本局伤害：{hurt}")
                     if self.LeftClick():
-                        logging.info("击败数量：")
+                        logging.info("跳过了结算界面2")
 
 
             # 结算界面2
@@ -398,28 +403,38 @@ class Automation:
                 # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
                 self.UserPause()
                 #后续：OCR识别获取增加的经验
-                logging.info("【进入结算界面2：】")
+                logging.info("【进入结算界面3：】")
+                if self.MoveToAreaRandom(UIInfo.UI_end_area1):
+                    if self.LeftClick():
+                        logging.info("跳过了结算界面3")
+
+            # 结算界面4
+            elif self.UI == game_info.UI_PVP_Game_End4:
+                # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
+                self.UserPause()
+                self.gameTime += 1
+                #后续：OCR识别获取增加的经验
+                logging.info("【进入结算界面4：】")
                 #获取经验值EXP
-                curEXP = -1
                 curEXP = self.getEXP()
                 self.EXP += curEXP
                 logging.info(f"本局游戏经验值：{curEXP}(若为0则表示OCR识别经验值失败。)")
                 logging.info(f"本次脚本已获取游戏经验值：{self.EXP}")
-                if self.MoveToAreaRandom(UIInfo.UI_end_area1):
-                    if self.LeftClick():
-                        logging.info("跳过了结算界面2")
+                self.op.Sleep(code_control.Common_sleep)
+                if self.PressKey(key_code.Space):
+                    logging.warning("使用空格跳过结算界面4")
 
             # 可以空格跳过的界面
             elif self.UI == game_info.UI_Skip_Space:
                 self.op.Sleep(code_control.Common_sleep)
-                self.PressKey(key_code.Space)
-                logging.warning("可以空格跳过的界面：尝试跳出错误界面，输入一次“空格”")
+                if self.PressKey(key_code.Space):
+                    logging.warning("可以空格跳过的界面：尝试跳出错误界面，输入一次“空格”")
 
             # 可以ESC跳过的界面
             elif self.UI == game_info.UI_Skip_ESC:
                 self.op.Sleep(code_control.Common_sleep)
-                self.PressKey(key_code.ESC)
-                logging.warning("可以ESC跳过的界面：尝试跳出错误界面，输入一次“ESC”")
+                if self.PressKey(key_code.ESC):
+                    logging.warning("可以ESC跳过的界面：尝试跳出错误界面，输入一次“ESC”")
 
             # 返回游戏界面：一般是误触ESC导致的
             elif self.UI == game_info.UI_Return_game:
@@ -484,25 +499,52 @@ class Automation:
         #     return False
 
     def getEXP(self)->int:
-        picFullName = "/Pic/tmpEXP.bmp"
+        EXE1picFullName = "/Pic/tmpEXP1.bmp"
+        EXE2picFullName = "/Pic/tmpEXP2.bmp"
+        EXE1 = 0
+        EXE2 = 0
         self.op.Sleep(code_control.Capture_sleep)
-        if self.captureArea(UI_info.UI_game_end2_value, picFullName):  # 如果截图指成功
+        if self.captureArea(UI_info.UI_EXE_area_1, EXE1picFullName):  # 如果截图指成功
             self.op.Sleep(code_control.OCR_sleep)
-            EXPstr = self.ocr_pic_text(picFullName)
+            EXPstr = self.ocr_pic_text(EXE1picFullName)
             if EXPstr != "":
                 # logging.info(f"getEXP：OCR识别到经验值字符串：{EXPstr}")
                 curEXP = int(re.findall(r"\d+",EXPstr)[0])
                 # logging.info(f"getEXP：OCR识别到经验值：{curEXP}")
                 if curEXP > 0:
-                    return curEXP
-                else:
-                    return 0
-            else:
-                logging.error(f"getEXP：OCR未识别到经验值字符串")
-                return 0
+                    if game_info.EXE_MIN <= curEXP <= game_info.EXE_MAX:
+                        EXE1 = curEXP
+                    else:
+                        EXE1 = 0
         else:
-            logging.error(f"captureArea：截图区域{UI_info.UI_game_end2_value}失败。")
-            return 0
+            logging.error(f"captureArea：截图区域{UI_info.UI_EXE_area_1}失败。")
+        self.op.Sleep(code_control.Capture_sleep)
+        if self.captureArea(UI_info.UI_EXE_area_2, EXE2picFullName):  # 如果截图指成功
+            self.op.Sleep(code_control.OCR_sleep)
+            EXPstr = self.ocr_pic_text(EXE2picFullName)
+            if EXPstr != "":
+                # logging.info(f"getEXP：OCR识别到经验值字符串：{EXPstr}")
+                curEXP = int(re.findall(r"\d+",EXPstr)[0])
+                # logging.info(f"getEXP：OCR识别到经验值：{curEXP}")
+                if curEXP > 0:
+                    if game_info.EXE_MIN <= curEXP <= game_info.EXE_MAX:
+                        EXE2 = curEXP
+                    else:
+                        EXE2 = 0
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_EXE_area_2}失败。")
+        if (EXE1 == EXE2) and (EXE2 != 0):
+            return EXE1 #这里可能是正确的经验值，也可能是0
+        else:
+            logging.error(f"OCR识别通行证经验值，精确值{EXE1}≠粗略值{EXE2}。首先使用非0值，如果不同则返回20～100之间的值。")
+            if EXE1 == 0 and EXE2 != 0 :
+                return EXE2
+            elif EXE2 == 0 and EXE1 != 0 :
+                return EXE1
+            else:
+                return EXE1
+
+
 
     #移动鼠标到目标位置
     def MoveTo(self, dstPoint:list[2])->bool:
@@ -603,7 +645,22 @@ class Automation:
             return False
 
     def get_cur_UI(self)->int:
+        picFullName = "/Pic/tmpScreen.bmp"
 
+        # 当前界面是否为结算界面4-经验值界面？下面两个方式都可以认为是经验结算界面
+        self.op.Sleep(code_control.Common_sleep);
+        if self.captureArea(UI_info.UI_end_area4, picFullName):  # 如果截图指成功
+            if self.ocr_pic_text(picFullName) == UI_info.UI_end_text4:
+                logging.info(f"get_cur_UI：OCR指定区域{UI_info.UI_end_area4}识别到进入结算界面4：通行证经验值")
+                return game_info.UI_PVP_Game_End4
+        else:
+            logging.error(f"captureArea：截图区域{UI_info.UI_end_area4}失败。")
+        # self.op.Sleep(code_control.FindPic_sleep)
+        # findPicRlt = self.findPic("/Pic/EXEUI_Pic.bmp", code_control.FindPic_sim)
+        # if findPicRlt[0] != -1:
+        #     logging.info(f"get_cur_UI：找到图片EXEUI_Pic.bmp左上角坐标：{findPicRlt[1:]}："
+        #                  f"该界面需先OCR获取通行证经验，然后使用空格进行跳过")
+        #     return game_info.UI_PVP_Game_End4
 
         # #通过查找屏幕截图中是否存在特征图片，来判断模式：可以使用空格进行跳过
         self.op.Sleep(code_control.FindPic_sleep)
@@ -638,7 +695,7 @@ class Automation:
 
         #先截图屏幕指定区域，再OCR识别指定区域文字来判断
         self.op.Sleep(code_control.Common_sleep);
-        picFullName ="/Pic/tmpScreen.bmp"
+
 
         # 是否为主界面？
         self.op.Sleep(code_control.Common_sleep);
