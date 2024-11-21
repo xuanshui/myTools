@@ -1,10 +1,19 @@
 #本文件是一些参数设置
 path_tools_dll = "D:/code/Python/Tools/op-0.4.5_with_model/tools.dll"
 path_opx64_dll = "D:/code/Python/Tools/op-0.4.5_with_model/op_x64.dll"
+
+# path_tools_dll = "E:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
+# path_opx64_dll = "E:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
 #代码流程控制相关的参数
 class CodeControl:
-    clientWindowSize_X = 1280
-    clientWindowSize_Y = 720
+    gameSoftwarePath = "D:/EpicGame/NARAKABLADEPOINT/StartGame.exe"
+    clientWindowSize_X = 1280   #设置Naraka窗口的尺寸：宽
+    clientWindowSize_Y = 720      #设置Naraka窗口的尺寸：高
+
+    ## 启动指定的游戏exe文件后，等一段时间秒，让程序起来，显示出界面后再说，单位：毫秒，这里是30秒
+    gameRestartWaitTime1 = 60000
+    ## 启动指定的游戏exe文件后，等一段时间秒，让程序起来，显示出界面后再说，单位：毫秒，这里是30秒
+    gameRestartWaitTime2 = 10000
 
     loop_count = 5    #主循环次数，即游戏的场数
 
@@ -16,7 +25,7 @@ class CodeControl:
     sleep_user_paused = 30000   #用户按下暂停键，则休眠30秒
     sleep_after_start_game = 15000  #脚本点击“开始游戏”后，需要休眠的时间。如果不休眠，可能会导致一直点这个区域导致匹配失败。
 
-    sleep_main_cycle = 600  #主循环每600ms进行一次
+    sleep_main_cycle = 200  #每个周期，主动休眠的时间
 
     Common_sleep = 100  #各个普通操作之间的睡眠时间，100毫秒
     OCR_sleep = 200     #每次进行OCR之前，休眠的时间
@@ -29,7 +38,10 @@ class CodeControl:
     Random_range_y = 10  # 随机移动鼠标时，随机范围，单位：像素点
 
     HoldTimeStart = 1100    #蓄力时间随机范围的最小值
-    HoldTimeEnd = 5000      #蓄力时间随机范围的最大值
+    HoldTimeEnd = 3500      #蓄力时间随机范围的最大值
+
+    GameInTimeS_MAX = 20    #如果游戏剩余时间大于等于20秒，就不进行完整的get_cur_UI()函数获取界面信息
+    Critical_Failure_Max_Cnt = 10 # 连续N个周期发生严重故障，重启游戏
 
 class KeyCode:
     ESC = 27
@@ -58,6 +70,8 @@ class GameInfo:
 
     EXE_MIN = 20    #一局无尽试炼，默认的通行证经验值范围：20～100
     EXE_MAX = 100
+
+    TimeLeftS_Max = 780 #一局无尽试炼，最多13min×60s=780秒
 
 
 #无界14X屏幕原始分辨率：2880*1800
@@ -113,7 +127,9 @@ class UIInfo:
     UI_game_text = "排名"
     UI_game_area2 = [84, 660, 174, 681]
     UI_game_text2 = "初代玄女顾清寒"
+    UI_time_left = [1155, 0, 1214, 23]  #在游戏内，该区域显示本局游戏的剩余时间，格式为“12:23”
 # ============武道争锋END========================
+    UI_safe_click_area = [167,96] # 安全点击区域，如果进入到错误界面，点击这个位置可以安全跳过，不会点进奇怪的界面
 
     # UI_game_area = [34, 7, 65, 28]
     # UI_game_text = "尚存"

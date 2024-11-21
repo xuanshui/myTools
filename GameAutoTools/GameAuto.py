@@ -5,13 +5,15 @@ from win32com.client import Dispatch
 # from Settings_WuJie14X import *
 from Settings_Server import *
 import logging  #日志记录
-import random
-import re
+import random   #实现随机数
+import re       #正则表达式
+from datetime import datetime, timedelta    #获取时间
+import time     # 实现倒计时
 # from Settings_Server import *
 
 
 #调整日志记录形式：以文本形式记录
-LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+LOG_FORMAT = "%(asctime)s- %(levelname)s -%(message)s"
 log_file_name = "log.txt"
 log_file_handler = logging.FileHandler(log_file_name, encoding='GBK')   #GB18030
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT, handlers={log_file_handler})
@@ -29,57 +31,13 @@ if result != 1:
     logging.critical("\n\nOP插件免注册dll加载失败！脚本已退出。\n\n")
     exit(0)
 
-
-# class Point:
-#     # 平面坐标
-#     def __init__(self):
-#         self.X = -1
-#         self.Y = -1
-#
-#     def set_pos(self, x, y):
-#         self.X = x
-#         self.Y = y
-#
-# class Area:
-#     # 平面区域
-#     # 绝对坐标：X1左上角X坐标，Y1左上角Y坐标，X2右下角X坐标，Y2右下角Y坐标
-#     def __init__(self, hwnd_id):
-#         self.hwnd = hwnd_id
-#         self.X1 = -1  # 左上角X坐标
-#         self.Y1 = -1  # Y左上角Y坐标
-#         self.X2 = -1  # 右下角X坐标
-#         self.Y2 = -1  # 右下角Y坐标
-#
-#     def set_area(self, x1, y1, x2, y2):
-#         self.X1 = x1  # 左上角X坐标
-#         self.Y1 = y1  # Y左上角Y坐标
-#         self.X2 = x2  # 右下角X坐标
-#         self.Y2 = y2  # 右下角Y坐标
-#
-# class Area2:
-#     # 平面区域
-#     # X、Y指区域的起点，绝对坐标
-#     # W指区域的宽，H指区域的高，W、H不是绝对坐标位置，而是相对于X、Y的相对数值
-#     def __init__(self, hwnd_id):
-#         self.H = None
-#         self.W = None
-#         self.Y = None
-#         self.X = None
-#         self.hwnd = hwnd_id
-#
-#     def set_area(self, x, y, w, h):
-#         self.X = x  # X坐标
-#         self.Y = y  # Y坐标
-#         self.W = w  # 相对于X的宽
-#         self.H = h  # 相对于Y的高
-
-
 # OP的基础方法
 class Automation:
     #初始化
     def __init__(self):
         # 创建com对象
         self.op = Dispatch("op.opsoft")
+
         self.hwnd = 0  # 窗口句柄
         self.send_hwnd = 0
         self.UI = game_info.UI_Err    #游戏的界面类型，-1为非法值表示未获取到界面信息
@@ -99,6 +57,9 @@ class Automation:
         self.RatioY = 2
         self.op.SetShowErrorMsg(2)  # 设置是否弹出错误信息,默认是打开：0:关闭，1:显示为信息框，2:保存到文件,3:输出到标准输出
 
+        self.gameTimeLeftStr = ""   #剩余时间的字符串，格式“07:12”
+        self.gameTimeLeftS = 0   #本局游戏还剩余的时间：游戏右上角显示，这里的时间单位是秒
+        self.gameTimeEnd = 0    #本局游戏应该在什么时间结束，即当前时间+游戏剩余时间
         self.EXP = 0        #脚本本次运行所获取的所有经验值
         self.holdTime = 0   #一局内的蓄力次数
         self.gameTime = 0   #游戏次数
@@ -124,6 +85,8 @@ class Automation:
             # 再次使用op.MoveTo函数移动鼠标到点③，移动后立即判断当前鼠标位置点④和点①坐标是否相同？
             # 如果x、y坐标差值在2以内，就认为相同。返回坐标调试结果：True
             self.op.Sleep(code_control.Common_sleep) #先休眠100ms
+            if self.op.SetWindowState(self.hwnd, 1) == 1:
+                logging.info(f"激活窗口成功。")
             tmpArea = self.clientArea
             origin_pos = self.op.GetCursorPos() #记录鼠标原位置
             if origin_pos[0] != 1:  # 获取鼠标平面坐标失败，直接退出
@@ -147,11 +110,12 @@ class Automation:
                 logging.info(f"基础测试：op.GetCursorPos()获取鼠标平面坐标成功2:{tmp_cur_pos[1:]}")
             dstPoint2 = tmp_cur_pos[1:]  # 鼠标当前位置
             #获取坐标倍率:如果x坐标移动的倍率等于y坐标移动的倍率，则只算1个倍率
-            if (dstPoint2[0] / dstPoint1[0]) == (dstPoint2[1] / dstPoint1[1]):
-                self.Ratio = dstPoint2[0] / dstPoint1[0]
+            # 精度：小数点后2位
+            if f"{(dstPoint2[0] / dstPoint1[0]):.3f}" == f"{(dstPoint2[1] / dstPoint1[1]):.3f}":
+                self.Ratio = round(dstPoint2[0] / dstPoint1[0], 3)
             else:
-                self.RatioX = dstPoint2[0] / dstPoint1[0]
-                self.RatioY = dstPoint2[1] / dstPoint1[1]
+                self.RatioX = round(dstPoint2[0] / dstPoint1[0], 3)
+                self.RatioY = round(dstPoint2[1] / dstPoint1[1], 3)
                 logging.error(f"坐标存在倍率关系，x坐标倍率：{self.RatioX}，y坐标倍率：{self.RatioY}。"
                               f"需要更新代码。重新设计涉及到Ratio的各个函数：拆分单一Ratio倍率为RatioX倍率和RatioY倍率")
                 return False    #并不是调试失败了，而是需要更新代码。
@@ -276,11 +240,12 @@ class Automation:
             logging.warning(f"绑定窗口{window_name}失败。bind false")
         else:
             logging.info(f"成功绑定窗口{window_name}")
+
+
         return r
 
     # 自动化操作
-
-    def auto_play(self, range_r:int) -> int:
+    def auto_play(self, range_r:int):
         #1、窗口激活
         if self.op.SetWindowState(self.hwnd,1) == 1:  #激活窗口，显示到前台
             logging.info(f"激活窗口成功")
@@ -288,15 +253,15 @@ class Automation:
             logging.error(f"激活窗口失败")
 
         #2、主循环
-        count = 0
-        errUICnt = 0
-        while True:  #循环次数
+        count = 0       #周期计数
+        errUICnt = 0    #进入脚本认为可以跳过的界面（错误界面errUI）的次数
+        while True:  #一直进行
         # while count < code_control.loop_count:  # 循环次数
             count += 1  #计数器自增
             # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
             self.UserPause()
 
-            self.op.Sleep(code_control.sleep_main_cycle)# 周期500ms
+            self.op.Sleep(code_control.sleep_main_cycle)# 周期300ms
 
             # op插件的GetWindowState函数获取窗口是否处于激活状态
             if self.op.GetWindowState(self.hwnd, 1) == 1:
@@ -376,11 +341,14 @@ class Automation:
                 #重复进行空手右键蓄力
                 self.holdTime = 0
                 logging.info("【进入游戏局内界面：】")
+                if self.getGameTimeLeft():
+                    logging.info(f"本局游戏剩余时间：{self.gameTimeLeftStr}")
+                #下面进行一次右键蓄力
                 if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
                     if self.RightHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
                         logging.info("游戏局内界面：使用右键蓄力成功")
 
-            # 游戏内界面：死亡，待返魂
+            # 游戏内界面：死亡，待返魂【无尽试炼不存在该界面】
             elif self.UI == game_info.UI_PVP_Game_dad:
                 # 重复进行跳跃
                 # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
@@ -468,7 +436,54 @@ class Automation:
 
                     pass
 
-        return 1
+
+    # 获取本局游戏剩余时间，返回结束时间
+    def getGameTimeLeft(self)->bool:
+        picFullName = "/Pic/tmpScreen.bmp"
+        self.op.Sleep(code_control.Common_sleep)
+        if self.captureArea(UI_info.UI_time_left, picFullName):  # 如果截图指成功
+            self.op.Sleep(code_control.OCR_sleep)
+            # 如果识别到“12:23”之类的字符串，认为是获取到了剩余时间
+            time_str = self.ocr_pic_text(picFullName)
+            # 替换中文冒号为英文冒号，并去掉字符串中的空格
+            time_str = time_str.replace('：', ':').replace(' ', '')
+            if self.is_valid_time_format(time_str):#先判断字符串是不是
+
+                # 将时间段字符串转换为小时和分钟
+                minutes, seconds = map(int, time_str.split(':'))
+                # 创建一个 timedelta 对象，表示时间段
+                time_delta = timedelta(minutes=minutes,seconds=seconds)
+                # 获取当前时间，并计算倒计时的持续时间
+                now = datetime.now()
+                # 计算当前时间加上时间段后的新时间点
+                game_end_time = now + time_delta    #游戏结束的时间
+                # 本局游戏还剩多少秒
+                leftTimeS = (game_end_time - now).total_seconds()
+                leftTimeS = minutes * 60 + seconds
+                if 0 < leftTimeS < game_info.TimeLeftS_Max: #剩余时间的秒数，要在合理范围内，才认为正确
+
+                    self.gameTimeLeftStr = time_str
+                    # 获取本局游戏剩余时间
+                    self.gameTimeLeftS = leftTimeS
+                    # 获取本局游戏的结束时间点
+                    self.gameTimeEnd = game_end_time
+                    return True
+            self.gameTimeLeftStr = ""
+            # 获取本局游戏剩余时间
+            self.gameTimeLeftS = -1
+            # 获取本局游戏的结束时间点
+            self.gameTimeEnd = -1
+            return False
+
+    #正确的时间格式：“06:23”
+    @staticmethod
+    def is_valid_time_format(time_str:str)->bool:
+        # 尝试解析时间格式
+        try:
+            datetime.strptime(time_str, "%H:%M")
+            return True
+        except ValueError:
+            return False
 
     #检测用户输入暂停键，则休眠脚本
     def UserPause(self):
@@ -533,17 +548,16 @@ class Automation:
                         EXE2 = 0
         else:
             logging.error(f"captureArea：截图区域{UI_info.UI_EXE_area_2}失败。")
-        if (EXE1 == EXE2) and (EXE2 != 0):
+        if (EXE1 == EXE2) and (EXE1 != 0):
             return EXE1 #这里可能是正确的经验值，也可能是0
         else:
-            logging.error(f"OCR识别通行证经验值，精确值{EXE1}≠粗略值{EXE2}。首先使用非0值，如果不同则返回20～100之间的值。")
+            logging.error(f"OCR识别通行证经验值，精确值({EXE1}) ≠ 粗略值({EXE2})")
             if EXE1 == 0 and EXE2 != 0 :
                 return EXE2
             elif EXE2 == 0 and EXE1 != 0 :
                 return EXE1
             else:
                 return EXE1
-
 
 
     #移动鼠标到目标位置
@@ -588,7 +602,8 @@ class Automation:
             logging.warning(f"随机移动鼠标超范围！目标区域：{dstArea}范围内随机位置，当前位置：{curDstPoint2}")
             return False
 
-    def InArea(self,curPoint:list[2],curArea:list[4])->bool:
+    @staticmethod
+    def InArea(curPoint:list[2], curArea:list[4])->bool:
         if curArea[0] <= curPoint[0] <= curArea[2]:
             if curArea[1] <= curPoint[1] <= curArea[3]:
                 return True
@@ -645,6 +660,10 @@ class Automation:
             return False
 
     def get_cur_UI(self)->int:
+        # 如果游戏局内时间超过25秒，直接返回当前界面为游戏内界面
+        if self.gameTimeLeftS >= code_control.GameInTimeS_MAX:
+            return game_info.UI_PVP_Game_in
+
         picFullName = "/Pic/tmpScreen.bmp"
 
         # 当前界面是否为结算界面4-经验值界面？下面两个方式都可以认为是经验结算界面
@@ -732,15 +751,6 @@ class Automation:
             logging.error(f"captureArea：截图区域{UI_info.UI_select_point_area}失败。")
 
 
-        #截图前休眠
-        # self.op.Sleep(code_control.Common_sleep)
-        # if self.captureArea(UI_info.UI_end_area1, picFullName):  # 如果截图指成功
-        #     # OCR前休眠
-        #     self.op.Sleep(code_control.Common_sleep)
-            # if self.ocr_pic_text(picFullName) == UI_info.UI_end_text1:  #OCR识别："继续"
-            #     # if self.captureArea(UI_info.UI_end_area2, picFullName):  # 如果截图指成功
-            #     #     if self.ocr_pic_text(picFullName) == UI_info.UI_end_text2:
-
         # 是否为结算界面1？
         # 截图前休眠
         self.op.Sleep(code_control.Common_sleep)
@@ -755,7 +765,6 @@ class Automation:
             logging.error(f"captureArea：截图区域{UI_info.UI_game_end11}失败")
 
 
-
         # 是否为结算界面2？
         if self.captureArea(UI_info.UI_end_area2, picFullName):  # 如果截图指成功
             # OCR前休眠
@@ -765,65 +774,45 @@ class Automation:
         else:
             logging.error(f"captureArea：截图区域{UI_info.UI_game_end2}失败。")
 
+        # 无尽试炼没有这一项内容。正常排位/人机模式才有。
+        # # 是否为游戏内界面，已死亡待返魂：特征：中间:有“进入返魂坛复活”的字样
+        # self.op.Sleep(code_control.Common_sleep)
+        # if self.captureArea(UI_info.UI_game_dad, picFullName):  # 如果截图指成功
+        #     self.op.Sleep(code_control.OCR_sleep)
+        #     if self.ocr_pic_text(picFullName) == UI_info.UI_game_dad_text:
+        #         logging.info(f"get_cur_UI：OCR识别到进入游戏内界面：已死亡，待返魂")
+        #         return game_info.UI_PVP_Game_dad
+        # else:
+        #     logging.error(f"captureArea：截图区域{UI_info.UI_game_dad}失败。")
 
-        # 是否为游戏内界面，已死亡待返魂：特征：中间:有“进入返魂坛复活”的字样
-        self.op.Sleep(code_control.Common_sleep)
-        if self.captureArea(UI_info.UI_game_dad, picFullName):  # 如果截图指成功
-            self.op.Sleep(code_control.OCR_sleep)
-            if self.ocr_pic_text(picFullName) == UI_info.UI_game_dad_text:
-                logging.info(f"get_cur_UI：OCR识别到进入游戏内界面：已死亡，待返魂")
-                return game_info.UI_PVP_Game_dad
-        else:
-            logging.error(f"captureArea：截图区域{UI_info.UI_game_dad}失败。")
-
-        # 是否为游戏内界面，未死亡：特征1，左上角的“排名”，特征2，左下角的角色名，特征3，中间没有“进入返魂坛复活”的字样
+        # 是否为游戏内界面，未死亡：特征1，左上角的“排名”，无尽试炼特有：特征2，护甲粉末，特征3，凝血丸（因为无尽试炼出生就有）
         self.op.Sleep(code_control.Common_sleep)
         if self.captureArea(UI_info.UI_game_area, picFullName):  # 如果截图指成功
             self.op.Sleep(code_control.OCR_sleep)
+            # 如果识别到“排名”，认为是在游戏内
             if self.ocr_pic_text(picFullName) == UI_info.UI_game_text:
                 logging.info(f"get_cur_UI：OCR识别到进入游戏内界面，特征字：{UI_info.UI_game_text}")
                 return game_info.UI_PVP_Game_in
-            self.op.Sleep(code_control.Common_sleep)
-            if self.captureArea(UI_info.UI_game_area2, picFullName):  # 如果截图指成功UI_game_area2
-                self.op.Sleep(code_control.OCR_sleep)
-                if self.ocr_pic_text(picFullName) == UI_info.UI_game_text2:
-                    logging.info(f"get_cur_UI：OCR识别到进入游戏内界面，特征字：{UI_info.UI_game_text2}")
-                    return game_info.UI_PVP_Game_in
-            else:
-                logging.error(f"captureArea：截图区域{UI_info.UI_game_area2}失败。")
         else:
             logging.error(f"captureArea：截图区域{UI_info.UI_game_area}失败。")
+        # #通过查找屏幕截图中是否存在特征图片护甲粉末ArmorPowder.bmp，来判断是否为游戏内界面
+        self.op.Sleep(code_control.FindPic_sleep)
+        findPicRlt = self.findPic("/Pic/ArmorPowder2.bmp", code_control.FindPic_sim)
+        if findPicRlt[0] != -1:
+            logging.info(f"get_cur_UI：找到图片ArmorPowder2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
+            return game_info.UI_PVP_Game_in
+        # #通过查找屏幕截图中是否存在特征图片凝血丸BloodPill2.bmp，来判断是否为游戏内界面
+        self.op.Sleep(code_control.FindPic_sleep)
+        findPicRlt = self.findPic("/Pic/BloodPill2.bmp", code_control.FindPic_sim)
+        if findPicRlt[0] != -1:
+            logging.info(f"get_cur_UI：找到图片BloodPill2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
+            return game_info.UI_PVP_Game_in
 
 
-        # 不符合任何一个特征，就算错误
+        # 不符合任何一个特征，就认为进入了错误界面
         logging.error(f"get_cur_UI：界面识别失败。")
         return game_info.UI_Err
 
-        # if self.ocr_area_text(UI_info.UI_main_area) == UI_info.UI_main_text1 :
-        #     logging.info(f"get_cur_UI：OCR识别到进入主界面：未开始")
-        #     # return game_info.UI_PVP_Main_Prepare
-        # else:
-        #     if self.ocr_area_text(UI_info.UI_main_area) == UI_info.UI_main_text2:
-        #         logging.info(f"get_cur_UI：OCR识别到进入主界面：已开始，正在匹配")
-        #         # return game_info.UI_PVE_Main_Enter
-
-        # #是否为英雄选择界面
-        # if self.ocr_area_text(UI_info.UI_select_hero_area) == UI_info.UI_select_hero_text:
-        #     return game_info.UI_PVP_Select_Hero
-        #
-        # # 是否为跳点选择界面：龙隐洞天/聚窟州
-        # if self.ocr_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text1 or self.ocr_area_text(UI_info.UI_select_point_area) == UI_info.UI_select_point_text2:
-        #     return game_info.UI_PVP_Select_Point
-        #
-        # # 是否为结算界面，两个结算画面的特征其实都一样，这里就返回UI_PVP_Game_End1
-        # if self.ocr_area_text(UI_info.UI_end_area1) == UI_info.UI_end_text1 or self.ocr_area_text(UI_info.UI_end_area2) == UI_info.UI_end_text2:
-        #     return game_info.UI_PVP_Game_End1
-        #
-        # # 是否为游戏内界面
-        # if self.ocr_area_text(UI_info.UI_game_area) == UI_info.UI_game_text:
-        #     return game_info.UI_PVP_Game_in
-        # #不符合任何一个特征，就算错误
-        # return game_info.UI_Err
 
     #在整个屏幕截图中查找指定图片的位置，每次查找耗时约110ms
     def findPic(self, pic_name: str,sim:float) -> int:
