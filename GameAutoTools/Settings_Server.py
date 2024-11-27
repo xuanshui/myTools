@@ -33,6 +33,7 @@ class CodeControl:
     FindPic_sleep = 200 #每次查找图片前，休眠的时间
     Move_sleep = 100    #每次移动鼠标前，休眠的时间
     Click_sleep = 100  # 每次点击鼠标前，休眠的时间
+    ThreeClick_sleep = 800  # 连续点击左键/右键三次的时间间隔（左三A/右三A）
 
     Random_range_x = 10   #随机移动鼠标时，随机范围，单位：像素点
     Random_range_y = 10  # 随机移动鼠标时，随机范围，单位：像素点
@@ -47,6 +48,7 @@ class KeyCode:
     ESC = 27
     Cap = 20
     Space = 32
+    F = 70
 
 #游戏相关的信息：比如模式之类的
 class GameInfo:

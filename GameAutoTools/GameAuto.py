@@ -95,7 +95,7 @@ class Automation:
             else:
                 logging.info(f"基础测试：op.GetCursorPos()获取鼠标平面坐标成功1:{origin_pos[1:]}")
 
-            dstPoint1 = [int((tmpArea[0] + tmpArea[2]) / 2), int((tmpArea[1] + tmpArea[3]) / 2)]
+            dstPoint1 = [int((tmpArea[0] + tmpArea[2])   / 2), int((tmpArea[1] + tmpArea[3]) / 2)]
             if self.op.MoveTo(dstPoint1[0], dstPoint1[1]) == 1:
                 logging.info(f"基础测试：op.MoveTo()移动鼠标成功")
             else:
@@ -339,14 +339,46 @@ class Automation:
                 # 检测用户输入暂停键:如果用户按下CapLock，则休眠30秒
                 self.UserPause()
                 #重复进行空手右键蓄力
-                self.holdTime = 0
+                # self.holdTime = 0
                 logging.info("【进入游戏局内界面：】")
                 if self.getGameTimeLeft():
                     logging.info(f"本局游戏剩余时间：{self.gameTimeLeftStr}")
+                # 交替进行右键蓄力、右键三A、左键蓄力、左键三A
+                if count % 4 == 0:
                 #下面进行一次右键蓄力
-                if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
-                    if self.RightHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
-                        logging.info("游戏局内界面：使用右键蓄力成功")
+                    if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                        if self.RightHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
+                            logging.info("游戏局内界面：右键蓄力")
+                elif count % 4 == 1:
+                    if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                        # 左键点击3次，每次间隔60ms
+                        self.LeftClick()
+                        self.op.Sleep(CodeControl.ThreeClick_sleep)
+                        self.LeftClick()
+                        self.op.Sleep(CodeControl.ThreeClick_sleep)
+                        self.LeftClick()
+                        logging.info("游戏局内界面：左键三A")
+                elif count % 4 == 2:
+                #下面进行一次左键蓄力
+                    if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                        if self.LeftHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
+                            logging.info("游戏局内界面：左键蓄力")
+                elif count % 4 == 3:
+                    self.op.Sleep(CodeControl.Click_sleep * 3)
+                    self.PressKey(KeyCode.F)  # 尝试使用一次F技能
+                    self.op.Sleep(CodeControl.Click_sleep * 3)
+                    if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                        if self.RightHold(random.randint(code_control.HoldTimeStart,code_control.HoldTimeEnd)):
+                            logging.info("游戏局内界面：右键蓄力")
+                    # if self.MoveToAreaRandom(UIInfo.UI_Random_left_move):
+                    #     # 右键点击3次，每次间隔60ms
+                    #     self.LeftClick()
+                    #     self.op.Sleep(CodeControl.ThreeClick_sleep)
+                    #     self.LeftClick()
+                    #     self.op.Sleep(CodeControl.ThreeClick_sleep)
+                    #     self.LeftClick()
+                    #     logging.info("游戏局内界面：左键三A")
+
 
             # 游戏内界面：死亡，待返魂【无尽试炼不存在该界面】
             elif self.UI == game_info.UI_PVP_Game_dad:
