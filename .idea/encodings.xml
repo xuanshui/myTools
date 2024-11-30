@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
-    <file url="file://$PROJECT_DIR$/GameAutoTools/log.txt" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/GameAutoTools_CLI/log.txt" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/GameAutoTools_GUI/log.txt" charset="GBK" />
   </component>
 </project>
