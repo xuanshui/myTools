@@ -3,21 +3,7 @@ import random   #实现随机数
 from ctypes import windll
 from Common import *
 
-#——————————————————————————————————————————————————————————————————————————————————
-#   宏定义
-#——————————————————————————————————————————————————————————————————————————————————
-# 下面是一些宏定义
-WIN_STATE_CNT = 4           #监测的窗口状态数量
-WIN_STATE_EXIST = 0        #窗口是否存在
-WIN_STATE_RESPONSE = 1     #窗口是否能正常响应
-WIN_STATE_ACTIVE = 2       #窗口是否激活
-WIN_STATE_AREA_OK = 3       #窗口四维坐标是否
-
-MOUSE_MOVE_ERR_RNG = 2      # isPosInAreaAbout函数的误差允许范围
-#——————————————————————————————————————————————————————————————————————————————————
-#   免注册调用OP插件
-#——————————————————————————————————————————————————————————————————————————————————
-
+# PC_NAME = "ThinkBook16P"
 # PC_NAME = "MyServer"
 # PC_NAME = "WuJie14X"
 
@@ -52,9 +38,24 @@ elif PC_NAME == "WuJie14X":
 elif PC_NAME == "ThinkBook16P":
     gameLauncherPath = "D:/Programs/Naraka/program/StartGame.exe"  # ThinkBook16P
 
+#——————————————————————————————————————————————————————————————————————————————————
+#   宏定义
+#——————————————————————————————————————————————————————————————————————————————————
+# 下面是一些宏定义
+WIN_STATE_CNT = 4           #监测的窗口状态数量
+WIN_STATE_EXIST = 0        #窗口是否存在
+WIN_STATE_RESPONSE = 1     #窗口是否能正常响应
+WIN_STATE_ACTIVE = 2       #窗口是否激活
+WIN_STATE_AREA_OK = 3       #窗口四维坐标是否
+
+MOUSE_MOVE_ERR_RNG = 2      # isPosInAreaAbout函数的误差允许范围
+#——————————————————————————————————————————————————————————————————————————————————
+#   免注册调用OP插件
+#——————————————————————————————————————————————————————————————————————————————————
+
 #获取屏幕分辨率。要乘以缩放倍率。
 DisplayScalingRatio = 1.0   #屏幕缩放：默认无缩放
-ScreenResolution = (1920, 1080) #默认屏幕分辨率：1920×1080
+ScreenResolution = (1920, 1080) #默认屏幕分辨率：1920×1080。后面有函数initOP()会获取实际的分辨率。
 
 # 加载免注册dll
 toolsDll = windll.LoadLibrary(path_tools_dll)
@@ -71,8 +72,6 @@ windll.user32.SetProcessDPIAware()
 # 创建OP插件对象
 OP = Dispatch("op.opsoft")
 G_WorkPath = OP.GetPath()     # 全局工作路径
-
-
 
 
 #——————————————————————————————————————————————————————————————————————————————————
@@ -219,7 +218,7 @@ class OPVal:
     random_move_range_x = 10  # 随机移动鼠标时，随机范围，单位：像素点
     random_move_range_y = 10  # 随机移动鼠标时，随机范围，单位：像素点
     ratio_deviation = 2       # 利用鼠标的移动来获取坐标系倍率，所允许最大误差，单位像素点
-    ratio_min = 0           # ratio合理范围的最小值
+    ratio_min = 0.1           # ratio合理范围的最小值
     ratio_max = 5.0           # ratio合理范围的最大值
     cntGetRatio = 5           # 最多尝试获取坐标系倍率的次数
 
@@ -279,29 +278,28 @@ class BaseSet:
     @staticmethod
     def base_test_all(hwnd: int, ratio:list[2])->bool:
         rlt = True  #默认成功
+        # 鼠标功能测试
         OP.Sleep(OPTime.slp_cmd * 2)
         if BaseSet.base_test_mouse(hwnd, ratio):
             logging.info(f"BaseSet.base_test_mouse()鼠标功能测试成功！")
         else:
             logging.error(f"BaseSet.base_test_mouse()鼠标功能测试失败！")
             rlt = False
-            # logging.error(f"错误信息{OP.GetLastError()}")
-            # print(f"错误信息{OP.GetLastError()}")
-
+        # 键盘功能测试
         OP.Sleep(OPTime.slp_cmd * 2)
         if BaseSet.base_test_keypad():
             logging.info(f"BaseSet.base_test_keypad()键盘功能测试成功！")
         else:
             logging.error(f"BaseSet.base_test_keypad()键盘功能测试失败！")
             rlt = False
-
+        # 截图与OCR功能测试
         OP.Sleep(OPTime.slp_cmd * 2)
         if BaseSet.base_test_picHandle():
             logging.info(f"BaseSet.base_test_picHandle()截图与OCR功能测试成功！")
         else:
             logging.error(f"BaseSet.base_test_picHandle()截图与OCR功能测试失败！")
             rlt = False
-
+        # 窗口操作功能测试
         OP.Sleep(OPTime.slp_cmd * 2)
         if BaseSet.base_test_window(hwnd):
             logging.info(f"BaseSet.base_test_window()窗口操作功能测试成功！")
@@ -314,31 +312,45 @@ class BaseSet:
     @staticmethod
     def base_test_mouse(hwnd: int, ratio:list[2])->bool:
         rlt = True
+        tryCnt = 0
+        while tryCnt < 10:
+            rlt = True
+            tryCnt += 1
+            # 错误次数越多，休眠时间越长
+            OP.Sleep(OPTime.slp_moveMouse * tryCnt)
 
-        # 尝试获取鼠标坐标
-        curPos = OP.GetCursorPos()
-        if curPos[0] != 1:
-            logging.error(f"GetCursorPos()获取鼠标平面坐标失败")
-            rlt = False
-        if curPos[1] > ScreenResolution[0] or curPos[2] > ScreenResolution[1]:
-            logging.error(f"GetCursorPos()获取鼠标平面坐标为无效值（超出屏幕分辨率）。"
-                          f"屏幕分辨率为{ScreenResolution}，程序获取的坐标为{curPos[1:]}")
-            rlt = False
+            # 尝试获取鼠标坐标
+            curPos = OP.GetCursorPos()
+            if curPos[0] != 1:
+                logging.error(f"GetCursorPos()获取鼠标平面坐标失败")
+                rlt = False
+                continue
+            if curPos[1] > ScreenResolution[0] or curPos[2] > ScreenResolution[1]:
+                logging.error(f"GetCursorPos()获取鼠标平面坐标为无效值（超出屏幕分辨率）。"
+                              f"屏幕分辨率为{ScreenResolution}，程序获取的坐标为{curPos[1:]}")
+                rlt = False
+                continue
 
-        #先移动鼠标到(0,0)，再复原鼠标位置
-        OP.Sleep(OPTime.slp_moveMouse)
-        if OP.MoveTo(0, 0) == 1 :
+            #移动鼠标到(0,0)，再复原鼠标位置(这里其实不能正确还原，因为坐标系倍率还没有获取呢)
             OP.Sleep(OPTime.slp_moveMouse)
-            if OP.MoveTo(curPos[1], curPos[2]) != 1:
+            if OP.MoveTo(0, 0) != 1 :
                 logging.info(f"MoveTo()移动鼠标失败")
                 rlt = False
+                continue
+            # OP.Sleep(OPTime.slp_moveMouse)
+            # if OP.MoveTo(curPos[1], curPos[2]) != 1:
+            #     logging.info(f"MoveTo()移动鼠标失败")
+            #     rlt = False
+            #     continue
+            if rlt: # 鼠标基础测试通过，退出循环
+                break
+        if rlt:
+            # 获取鼠标倍率ratio
+            if not WindowOp.getRatio(hwnd, ratio):
+                logging.error(f"获取坐标系倍率ratio失败！")
+                rlt = False
         else:
-            logging.info(f"MoveTo()移动鼠标失败")
-            rlt = False
-
-        # 获取鼠标倍率ratio
-        WindowOp.getRatio(hwnd, ratio)
-
+            logging.error(f"base_test_mouse：鼠标基础测试不通过，无法调用函数getRatio获取坐标系倍率ratio")
         return rlt
 
     @staticmethod
@@ -545,7 +557,7 @@ class WindowOp:
         # 鼠标：设置为normal，可以
         # 键盘：必需设置为normal.hd才能进行输入
         # 模式：设置为0，可以
-
+        logging.info(f"\n========================进入函数：bind_window========================")
         # 如果已经绑定过窗口，先解绑，再以新的方法绑定。
         if OP.IsBind():
             OP.UnBindWindow()
@@ -558,7 +570,7 @@ class WindowOp:
         tryCnt = 0
         while tryCnt < 10:
             tryCnt += 1
-            OP.Sleep(OPTime.slp_cmd)  #休眠一下
+            OP.Sleep(OPTime.slp_cmd * tryCnt)  #休眠一下
             OP.SetWindowState(hwnd, 12)     #激活窗口，再进行后面的测试。
             OP.SetWindowState(hwnd, 7)
             if not BaseSet.base_test_all(hwnd, ratio):
@@ -651,7 +663,11 @@ class WindowOp:
                     clientArea:list[4],clientSize:list[2],
                     clientAreaMidPoint:list[2],
                     windowStates:list[WIN_STATE_CNT])->bool:
-
+        logging.info(f"\n========================进入函数：update_window========================")
+        if windowStates[WIN_STATE_AREA_OK]:
+            logging.info(f"窗口尺寸和坐标正常，无需调用update_window函数。")
+            return True
+        logging.info(f"窗口尺寸和坐标存在异常，update_window函数尝试进行修复。")
         OP.SetWindowState(hwnd, 12)  # 激活窗口，再进行后面的操作。
         OP.SetWindowState(hwnd, 7)
 
@@ -662,17 +678,18 @@ class WindowOp:
                                  OPVal.clientWindowSize_Y) != 1:
             # if OP.SetWindowSize(hwnd, OPVal.clientWindowSize_X,
             #                      OPVal.clientWindowSize_Y) != 1:
-            logging.error(f"op.SetClientSize设置窗口尺寸失败")
+            logging.error(f"OP.SetClientSize设置窗口尺寸失败")
             return False
         OP.Sleep(OPTime.slp_cmd)
         if OP.MoveWindow(hwnd, OPVal.clientWindowPos_X, OPVal.clientWindowPos_Y) != 1 :
-            logging.error("set_window移动窗口到[0,0]失败！")
+            logging.error("OP.MoveWindow移动窗口到[0,0]失败！")
             return False
+
 
         tmpClientArea = OP.GetClientRect(hwnd)
         tmpWindowArea = OP.GetWindowRect(hwnd)
         if tmpClientArea[0] != 1:
-            logging.error(f"op.GetClientRect获取client窗口尺寸失败")
+            logging.error(f"OP.GetClientRect获取client窗口尺寸失败")
             return False
         if not (
                 (0 <= tmpClientArea[1] < tmpClientArea[3]) and
@@ -680,10 +697,11 @@ class WindowOp:
                 (tmpClientArea[3] <= ScreenResolution[0]) and
                 (tmpClientArea[4] <= ScreenResolution[1])
                 ):
-            logging.error(f"op.GetClientRect获取client窗口尺寸为非法值：{tmpClientArea}，超出了屏幕分辨率范围{ScreenResolution}")
+            logging.error(f"OP.GetClientRect获取client窗口尺寸为非法值："
+                          f"{tmpClientArea}，超出了屏幕分辨率范围{ScreenResolution}")
             return False
         if tmpWindowArea[0] != 1:
-            logging.error(f"op.GetWindowRect获取window窗口尺寸失败")
+            logging.error(f"OP.GetWindowRect获取window窗口尺寸失败")
             return False
         if not (
                 (0 <= tmpWindowArea[1] < tmpWindowArea[3]) and
@@ -691,9 +709,38 @@ class WindowOp:
                 (tmpWindowArea[3] <= ScreenResolution[0]) and
                 (tmpWindowArea[4] <= ScreenResolution[1])
                 ):
-            logging.error(f"op.GetWindowRect获取client窗口尺寸为非法值：{tmpWindowArea}，超出了屏幕分辨率范围{ScreenResolution}")
+            logging.error(f"OP.GetWindowRect获取client窗口尺寸为非法值："
+                          f"{tmpWindowArea}，超出了屏幕分辨率范围{ScreenResolution}")
             return False
+
+        # #如果window尺寸等于client尺寸（没有误差），则认为游戏窗口是无边框窗口
+        # if (clientSize[0]==windowSize[0]) and (clientSize[1]==windowSize[1]):
+        #     isBorderlessWindow = True
+        # else:
+        #     isBorderlessWindow = False
+        # # 设置窗口尺寸后，如果不是无边框窗口则需要重新移动窗口
+        # #如果窗口是无边框窗口：直接返回成功，无需移动窗口
+        # if isBorderlessWindow:
+        #     return True
+        # else:
+
+
+        # 如果窗口是普通窗口（有边框）：分别向x、y方向多移动一些距离，才能使client真正到达左上角
+        # 因为op插件给的函数时MoveWindow()不是MoveClient()
+        # 如果移动到左上角，需要移动的多余像素点数量，分为x方向和y方向
+        windowMoveX = abs(tmpClientArea[1] - tmpWindowArea[1])
+        windowMoveY = abs(tmpClientArea[2] - tmpWindowArea[2])
+        if OP.MoveWindow(hwnd, -windowMoveX, -windowMoveY):  # 移动窗口到左上角。Naraka的数据是x：-13，y：-58
+            logging.info("移动窗口到左上角成功")
+        else:
+            logging.warning("移动窗口到左上角失败")
+
+        # 获取移动到正确位置的坐标
+        tmpClientArea = OP.GetClientRect(hwnd)
+        tmpWindowArea = OP.GetWindowRect(hwnd)
         # 输出
+        # clientArea = OP.GetClientRect(hwnd)[1:]
+        # windowArea = OP.GetWindowRect(hwnd)[1:]
         clientArea[0] = tmpClientArea[1]
         clientArea[1] = tmpClientArea[2]
         clientArea[2] = tmpClientArea[3]
@@ -711,32 +758,6 @@ class WindowOp:
         windowSize[0] = abs(windowArea[2] - windowArea[0])
         windowSize[1] = abs(windowArea[3] - windowArea[1])
 
-        # #如果window尺寸等于client尺寸（没有误差），则认为游戏窗口是无边框窗口
-        # if (clientSize[0]==windowSize[0]) and (clientSize[1]==windowSize[1]):
-        #     isBorderlessWindow = True
-        # else:
-        #     isBorderlessWindow = False
-        # # 设置窗口尺寸后，如果不是无边框窗口则需要重新移动窗口
-        # #如果窗口是无边框窗口：直接返回成功，无需移动窗口
-        # if isBorderlessWindow:
-        #     return True
-        # else:
-
-
-        # 如果窗口是普通窗口（有边框）：分别向x、y方向多移动一些距离，才能使client真正到达左上角
-        # 因为op插件给的函数时MoveWindow()不是MoveClient()
-        # 如果移动到左上角，需要移动的多余像素点数量，分为x方向和y方向
-        windowMoveX = abs(clientArea[0] - windowArea[0])
-        windowMoveY = abs(clientArea[1] - windowArea[1])
-        if OP.MoveWindow(hwnd, -windowMoveX, -windowMoveY):  # 移动窗口到左上角。Naraka的数据是x：-13，y：-58
-            logging.info("移动窗口到左上角成功")
-        else:
-            logging.warning("移动窗口到左上角失败")
-
-        clientArea = OP.GetClientRect(hwnd)[1:]
-        windowArea = OP.GetWindowRect(hwnd)[1:]
-        logging.info(f"获取client窗口坐标成功：{clientArea}")
-        logging.info(f"获取window窗口坐标成功：{windowArea}")
         # 获取窗口中心点坐标
         clientAreaMidPoint[0] = (clientArea[0] + clientArea[2]) / 2
         clientAreaMidPoint[1] = (clientArea[1] + clientArea[3]) / 2
@@ -748,20 +769,22 @@ class WindowOp:
         else:
             windowStates[WIN_STATE_ACTIVE] = False
         logging.info(f"client窗口是否激活：{windowStates[WIN_STATE_ACTIVE]}")
+        logging.info(f"窗口尺寸和坐标已修复。")
         return True
 
 
 # 利用鼠标的移动来获取坐标倍数关系
     @staticmethod
-    def getRatio(hwnd:int, ratio:list[2], areaClient: list[4]=OPVal.areaTestRatio) -> list[2]:
+    def getRatio(hwnd:int, ratio:list[2], areaClient: list[4]=OPVal.areaTestRatio) -> bool:
         tryCnt = 0  # 坐标倍数调试次数
         ratioRlt = [-1, -1]
-        ratio[0] = ratioRlt[0]
-        ratio[1] = ratioRlt[1]
         OP.Sleep(OPTime.slp_cmd)  # 休眠一下
         OP.SetWindowState(hwnd, 12)  # 激活窗口，再进行后面的测试。
         OP.SetWindowState(hwnd, 7)
         while tryCnt < OPVal.cntGetRatio:
+            ratioRlt = [-1, -1]
+            ratio[0] = ratioRlt[0]
+            ratio[1] = ratioRlt[1]
             tryCnt += 1
             # 思路：
             # 1、先获取客户端窗口的坐标，然后计算移动的目标点①：窗口四点的中间点。
@@ -776,23 +799,24 @@ class WindowOp:
 
             if origin_pos[0] != 1:  # 获取鼠标平面坐标失败，直接退出
                 logging.error(f"WindowOp.getRatio函数：GetCursorPos()获取鼠标平面坐标失败1:{origin_pos[1:]}")
-                return ratioRlt
+                continue
             if origin_pos[1] > ScreenResolution[0] or origin_pos[2] > ScreenResolution[1]:
                 logging.error(f"第{tryCnt}次：WindowOp.getRatio函数：GetCursorPos获取鼠标坐标为无效值（超出屏幕分辨率）。"
                               f"屏幕分辨率为{ScreenResolution}，"
                               f"程序获取的鼠标坐标为{origin_pos[1:]}")
+                # 暂时这样处理吧
                 continue
             logging.info(f"WindowOp.getRatio函数：GetCursorPos()获取鼠标平面坐标成功:{origin_pos[1:]}")
             # 移动鼠标的目的地：窗口的中间点。
             dstPoint1 = [int((tmpArea[0] + tmpArea[2]) / 2), int((tmpArea[1] + tmpArea[3]) / 2)]
             if OP.MoveTo(dstPoint1[0], dstPoint1[1]) != 1:
                 logging.info(f"WindowOp.getRatio函数：MoveTo()移动鼠标失败")
-                return ratioRlt
+                continue
             # 获取鼠标坐标
             tmp_cur_pos = OP.GetCursorPos()  # 该函数返回了一个三元素的元组
             if tmp_cur_pos[0] != 1:  # 获取鼠标平面坐标失败，直接退出
                 logging.error(f"WindowOp.getRatio函数：GetCursorPos()获取鼠标平面坐标失败2:{tmp_cur_pos[1:]}")
-                return ratioRlt
+                continue
             dstPoint2 = tmp_cur_pos[1:]  # 鼠标当前位置
             # 获取坐标倍率
             if dstPoint1[0] != 0 and dstPoint1[1] != 0:
@@ -802,7 +826,7 @@ class WindowOp:
                 ratioRlt = [ratioX, ratioY]
             else:
                 logging.error(f"除数为0.移动鼠标到了原点(0, 0)。")
-                return ratioRlt
+                continue
             # 验证坐标倍率：再次移动
             dstPoint3 = [int(dstPoint1[0] / ratioX), int(dstPoint1[1] / ratioY)]
             OP.MoveTo(dstPoint3[0], dstPoint3[1])
@@ -815,19 +839,17 @@ class WindowOp:
                 ratioRlt = [ratioX, ratioY]
 
                 # 如果ratio不在合法范围内，认为获取坐标系倍率失败
-                if not ((OPVal.ratio_min < ratioRlt[0] < OPVal.ratio_max) and
-                        (OPVal.ratio_min < ratioRlt[1] < OPVal.ratio_max)):
+                if not ((OPVal.ratio_min <= ratioRlt[0] <= OPVal.ratio_max) and
+                        (OPVal.ratio_min <= ratioRlt[1] <= OPVal.ratio_max)):
                     logging.error(f"第{tryCnt}次调试，获取坐标系倍率失败:{ratioRlt}，倍率范围非法。")
+                    continue
                 else:
                     logging.info(f"第{tryCnt}次调试，成功获取坐标倍率系数Ratio={ratioRlt}")
                     ratio[0] = ratioRlt[0]
                     ratio[1] = ratioRlt[1]
-                    return ratioRlt
-            else:
-                logging.error(f"第{tryCnt}次调试，获取坐标倍率系数Ratio失败！")
+                    return True
         # 尝试多次后，仍然无法获得正确的坐标倍率：
-
-        return ratioRlt
+        return False
 
 #——————————————————————————————————————————————————————————————————————————————————
 #   键盘的相关操作

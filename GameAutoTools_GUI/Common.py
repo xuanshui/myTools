@@ -9,13 +9,6 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT, handlers={log_file_h
 # logging.basicConfig(filename=log_file_name, level=logging.DEBUG, format=LOG_FORMAT)
 
 
-# #判断一个点的坐标是否在指定的区域内
-# def isPosInArea(pointArea:list[2], rangeArea:list[4])->bool:
-#     if pointArea[0] >= rangeArea[0] and pointArea[1] >= rangeArea[1]:
-#         if pointArea[0] <= rangeArea[2] and pointArea[1] <= rangeArea[3]:
-#             return True
-#     return False
-
 #————————————————————————————————————————————————————
 # 周期自检 periodic self-check:PSC
 #————————————————————————————————————————————————————
