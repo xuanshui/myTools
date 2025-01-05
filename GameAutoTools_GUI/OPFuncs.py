@@ -6,9 +6,10 @@ from Common import *
 # PC_NAME = "ThinkBook16P"
 # PC_NAME = "MyServer"
 # PC_NAME = "WuJie14X"
+# PC_NAME = "Desktop"
 
 #======================================================
-PC_NAME = "ThinkBook16P"                    #当前所用的电脑
+PC_NAME = "Desktop"                    #当前所用的电脑
 #======================================================
 
 if PC_NAME == "MyServer":
@@ -24,6 +25,10 @@ elif PC_NAME == "ThinkBook16P":
     # ThinkBook16P
     path_tools_dll = "D:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "D:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
+elif PC_NAME == "Desktop":
+    # Desktop
+    path_tools_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/tools.dll"
+    path_opx64_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/op_x64.dll"
 else:
     print("path_tools_dll、path_opx64_dll路径为空！")
     exit(0)
@@ -31,13 +36,12 @@ else:
 # 游戏启动器的绝对路径
 if PC_NAME == "MyServer":
     gameLauncherPath = "D:/EpicGame/NARAKABLADEPOINT/StartGame.exe" # 服务器
-
 elif PC_NAME == "WuJie14X":
     gameLauncherPath = "D:/EpicGames/NARAKABLADEPOINT/StartGame.exe"  # 无界14
-
 elif PC_NAME == "ThinkBook16P":
     gameLauncherPath = "D:/Programs/Naraka/program/StartGame.exe"  # ThinkBook16P
-
+elif PC_NAME == "Desktop":
+    gameLauncherPath = "E:/Programs/NARAKABLADEPOINT/program/StartGame.exe"  # Desktop
 #——————————————————————————————————————————————————————————————————————————————————
 #   宏定义
 #——————————————————————————————————————————————————————————————————————————————————
@@ -777,7 +781,7 @@ class WindowOp:
     @staticmethod
     def getRatio(hwnd:int, ratio:list[2], areaClient: list[4]=OPVal.areaTestRatio) -> bool:
         tryCnt = 0  # 坐标倍数调试次数
-        ratioRlt = [-1, -1]
+        # ratioRlt = [-1, -1]
         OP.Sleep(OPTime.slp_cmd)  # 休眠一下
         OP.SetWindowState(hwnd, 12)  # 激活窗口，再进行后面的测试。
         OP.SetWindowState(hwnd, 7)
@@ -823,7 +827,7 @@ class WindowOp:
                 ratioX = abs(dstPoint2[0] / dstPoint1[0])
                 ratioY = abs(dstPoint2[1] / dstPoint1[1])
                 logging.info(f"坐标存在倍率关系，x坐标倍率：{ratioX}，y坐标倍率：{ratioY}。")
-                ratioRlt = [ratioX, ratioY]
+                # ratioRlt = [ratioX, ratioY]
             else:
                 logging.error(f"除数为0.移动鼠标到了原点(0, 0)。")
                 continue
@@ -921,13 +925,32 @@ def isPosInAreaAbout(point:list[2], area:list[4], errRng:int = 1)->bool:
 #移动鼠标到目标位置
 class MouseOp:
     @staticmethod
+    def MoveR(xr:int, yr:int):    # 可以用于游戏内的视角调整，xr和yr是相对位移：xr、yr均为正是往右往下，为负是往左往上
+        OP.Sleep(OPTime.slp_moveMouse)
+        if OP.MoveR(xr, yr) == 1:
+            return True
+        else:
+            logging.error(f"OP.MoveR移动鼠标失败！")
+            return False
+
+    @staticmethod
+    def MoveRT(xr:int, yr:int):    # 可以用于游戏内的视角调整，xr和yr是相对位移：xr、yr均为正是往右往下，为负是往左往上
+        # OP.Sleep(OPTime.slp_moveMouse)
+        # 不加休眠
+        if OP.MoveR(xr, yr) == 1:
+            return True
+        else:
+            logging.error(f"OP.MoveR移动鼠标失败！")
+            return False
+
+    @staticmethod
     def MoveTo(dstPoint:list[2], ratio:list[2])->bool:
         OP.Sleep(OPTime.slp_moveMouse)
         if OP.MoveTo(dstPoint[0] / ratio[0], dstPoint[1] / ratio[1]) == 1:
             # logging.info(f"移动鼠标成功，目标地址：{dstPoint}")
             return True
         else:
-            logging.warning(f"移动鼠标失败！目标位置：{dstPoint}，当前位置：{OP.GetCursorPos()[1:]}")
+            logging.warning(f"OP.MoveTo移动鼠标失败！目标位置：{dstPoint}，当前位置：{OP.GetCursorPos()[1:]}")
             return False
 
     #移动鼠标到目标位置附近范围的随机一个地方，随机的范围可以设置
