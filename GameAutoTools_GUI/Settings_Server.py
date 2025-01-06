@@ -2,13 +2,13 @@
 from OPFuncs import OPTime, gameLauncherPath
 
 #游戏模式：无尽试炼、PVE征神-雪满弓刀
-GAME_MODE_ALL= ("PVP_WJSL", "PVE_XueManGongDao")
+# GAME_MODE_ALL= ("PVP_WJSL", "PVE_XueManGongDao")
 GAME_MODE_PVP_WJSL = "PVP_WJSL"             #无尽试炼
 GAME_MODE_PVE_XMGD = "PVE_XueManGongDao"    #PVE征神，雪满弓刀【注：难度为普通，英雄只能选宁红夜，魂玉不能需要振刀等操作\否则死掉一条命后，没法继续操作】
-GAME_MODE_PVE_HSBL = "PVE_HuangShaBaiLian"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海/岳山，只打第三个小聚点】
+GAME_MODE_PVE_HSBL = "PVE_HuangShaBaiLian"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
 
 #======================================================
-GAME_MODE_CUR = GAME_MODE_PVE_XMGD          #当前游戏模式
+GAME_MODE_CUR = GAME_MODE_PVE_HSBL          #当前游戏模式
 #======================================================
 
 # 下面是一些宏定义
@@ -36,13 +36,18 @@ class ParamTime(OPTime):
     default_InGame_LefTimeS_MAX = 10  # 如果游戏剩余时间大于等于10秒，就不进行完整的get_cur_UI()函数获取界面信息
 
     # ——————————————PVE雪满弓刀——————————————
-    default_InGame_TimeUsed_PVE_XMGD = 30   #打一局PVE雪满弓刀-普通难度，最少耗时30秒？要根据神识等级确定
-    slp_After_Select_Hero = 10000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
+    default_InGame_TimeUsed_PVE_XMGD = 20   #打一局PVE雪满弓刀-普通难度，最少耗时20秒？要根据神识等级确定
+    slp_After_Select_Hero = 20000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
     walkToEntry = 4000    #从出生点走到传送点，耗时x秒
     walkToRunShift = 1500  # 按住Shift后，开始奔跑的时间。
     holdTimeMin = 1300      #PVE征神的蓄力最短时间
     holdTimeMax = 1400      #PVE征神的蓄力最长时间
 
+    # ——————————————PVE黄沙百炼——————————————
+    default_InGame_TimeUsed_PVE_HSBL = 45  # 打一局PVE黄沙百炼-噩梦难度，最少耗时时间，单位：秒。要根据实测来填写
+    walkToPoint1 = 4000  # 从出生点走到传送点，耗时x秒
+    walkToRunShiftDefault = 1500  # 按住Shift后，开始奔跑的时间。
+    slpAfterFire = 1000  # 发射火炮后的固定休眠时间
 
 
 # 计数相关参数
@@ -83,12 +88,14 @@ class GameInfo:
     #——————————————————————游戏内————————————————————————
     UI_PVP_Game_In_WJSL = 50  # 游戏内界面：无尽试炼
     # UI_PVP_Game_Dad = 51  # 游戏内界面，死亡，待返魂
-    UI_PVE_Game_In_1_W = 60  # 游戏内界面：PVE征神，未到达传送点，长按W前往传送点
-    UI_PVE_Game_In_2_E = 61  # 游戏内界面：PVE征神，到达传送点，可以E传送
-    UI_PVE_Game_In_3_ESC = 62  # 游戏内界面：PVE征神，传送后出现的过渡动画，可以ESC跳过
-    UI_PVE_Game_In_4_Battle = 63  # 游戏内界面：PVE征神，局内战斗界面
+    UI_PVE_Game_In_1_W = 60  # 游戏内界面：PVE征神-雪满弓刀，未到达传送点，长按W前往传送点
+    UI_PVE_Game_In_2_E = 61  # 游戏内界面：PVE征神-雪满弓刀，到达传送点，可以E传送
+    UI_PVE_Game_In_3_ESC = 62  # 游戏内界面：PVE征神-雪满弓刀，传送后出现的过渡动画，可以ESC跳过
+    UI_PVE_Game_In_4_Battle = 63  # 游戏内界面：PVE征神-雪满弓刀，局内战斗界面
     # UI_PVE_Game_In_45_Again_W = 65  # 第一条命死掉，重新进入战斗区域
-    UI_PVE_Game_In_5_Succeed = 64  # 游戏内界面：PVE征神，通关成功，可以ESC返回大厅
+    UI_PVE_Game_In_5_Succeed = 64  # 游戏内界面：PVE征神-雪满弓刀，通关成功，可以ESC返回大厅
+    UI_PVE_HSBL_Game_In_1_ESC = 65  # 游戏内界面：PVE征神-黄沙百炼，过渡界面
+    UI_PVE_HSBL_Game_In_2_Battle = 66  # 游戏内界面：PVE征神-黄沙百炼
 
     # ——————————————————————游戏登录界面————————————————————————
     UI_LogIn_Announcement = 1     #登录界面1：公告
@@ -157,7 +164,7 @@ class WinInfo:
     Text_Char_PVE_Main = "开始征神"
     # —不勾选“疲劳增长”时，会有弹窗—
     Area_Char_PVE_Main_Sure = (496, 325, 789, 373)  #“当前挑战不再积累疲劳，但不产生掉落”
-    Text_Char_PVE_Main_Sure = "积累疲劳"
+    Text_Char_PVE_Main_Sure = "累积疲劳"    # 注：苍渊赛季为“积累疲劳”，雄威赛季为“累积疲劳”
     Point_PVE_Main_Not_Notify = (595, 445)  # 点击这个点，勾选上“今日不再提示”
     Area_PVE_Main_Sure = (506, 403, 568, 427) # 这个区域是“确定”
     # —疲劳值达到2400时，会有弹窗—
@@ -180,11 +187,12 @@ class WinInfo:
     Area_Hero_Name = (952,103,1141,143)    #在英雄选择界面OCR识别这个区域，能知道选择了什么英雄
     Area_Select_Cur_Hero = (1014,610,1148,636) #在英雄选择界面点击该区域，选择当前英雄
     Text_Select_Cur_Hero = "使用"
-    #PVE雪满弓刀
+    #PVE雪满弓刀/黄沙百炼
     Area_Char_PVE_Select_Hero = (0, 0, 120, 40)
     Text_Char_PVE_Select_Hero = "英雄选择"
     Area_PVE_Hero_Name = (943, 114, 1194, 153)  # 在英雄选择界面OCR识别这个区域，能知道选择了什么英雄
     Area_PVE_Hero_NingHy = (62, 136, 90, 174)   # 选中宁红夜
+    Area_PVE_Hero_JiCH = (280, 136, 312, 174)   # 选中季沧海
     Area_PVE_Select_Cur_Hero = (1057,611,1123,634)  # 在英雄选择界面点击该区域，选择当前英雄
 
     # ============无尽试炼-结算界面======================
@@ -238,6 +246,11 @@ class WinInfo:
     # 可能出现的“首次获得”某个魂玉，识别右下角有没有“ESC返回”。
     Area_Char_XMGD_End_6 = (558, 226, 718, 274)
     Text_Char_XMGD_End_6 = "获得"
+    # ============PVE黄沙百炼-结算界面======================
+    # 结算界面1：
+    # 游戏会自动跳过该界面，脚本可以不用识别。
+    Area_Char_HSBL_End_1 = (45, 45, 145, 94)
+    Text_Char_HSBL_End_1 = "失败"
 
     # ============游戏内界面======================
     #无尽试炼
@@ -267,6 +280,12 @@ class WinInfo:
     Text_Char_Game_in_PVE_5 = "通关成功"
     Area_PVE_Return_Home_From_Game = (603, 495, 678, 517)
     Text_PVE_Return_Home_From_Game = "返回大厅"
+    # PVE黄沙百炼
+    Area_Char_Game_in_PVE_HSBL_1 = (1214, 687, 1250, 711)  # 特征区域，可以跳过的过渡动画
+    Text_Char_Game_in_PVE_HSBL_1 = "跳过"
+    Area_Char_Game_In_PVE_HSBL_2 = (59, 60, 130, 115)  # 特征区域：OCR识别该区域应该是寻找出路
+    Text_Char_Game_In_PVE_HSBL_2 = "寻找出路"
+
 
     # ============ESC弹窗选择界面======================
     #游戏内
