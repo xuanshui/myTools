@@ -9,14 +9,14 @@ from Common import *
 # PC_NAME = "Desktop"
 
 #======================================================
-PC_NAME = "Desktop"                    #当前所用的电脑
+PC_NAME = "ThinkBook16P"                    #当前所用的电脑
 #======================================================
 
 if PC_NAME == "MyServer":
     # 服务器
     path_tools_dll = "D:/code/Python/Tools/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "D:/code/Python/Tools/op-0.4.5_with_model/op_x64.dll"
-    pass
+    cur_mouse_ratio = 1.0  # 鼠标视角基数
 elif PC_NAME == "WuJie14X":
     # 无界14
     path_tools_dll = "E:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
@@ -25,10 +25,12 @@ elif PC_NAME == "ThinkBook16P":
     # ThinkBook16P
     path_tools_dll = "D:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "D:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
+    cur_mouse_ratio = 1.32  # 鼠标视角基数
 elif PC_NAME == "Desktop":
     # Desktop
     path_tools_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/op_x64.dll"
+    cur_mouse_ratio = 1     # 鼠标视角基数
 else:
     print("path_tools_dll、path_opx64_dll路径为空！")
     exit(0)
@@ -894,6 +896,8 @@ class KeyOp:
                         return True
         logging.error(f"HoldKey操作{keyCode1}失败")
         return False
+
+
 
     # 检测到用户按下某个键，返回True
     @staticmethod
