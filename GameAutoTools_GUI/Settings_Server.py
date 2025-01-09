@@ -5,6 +5,7 @@ from OPFuncs import OPTime, gameLauncherPath
 # GAME_MODE_ALL= ("PVP_WJSL", "PVE_XueManGongDao")
 GAME_MODE_PVP_WJSL = "PVP_WJSL"             #无尽试炼
 GAME_MODE_PVE_XMGD = "PVE_XueManGongDao"    #PVE征神，雪满弓刀【注：难度为普通，英雄只能选宁红夜，魂玉不能需要振刀等操作\否则死掉一条命后，没法继续操作】
+GAME_MODE_PVE_HMZN = "PVE_HongMingZhiNan"   #PVE征神，鸿溟之难【注：难度为噩梦，英雄只能选宁红夜，魂玉为：沼生、瘴煞、祛毒、蚀骨春、苍牙元素、神躯】
 GAME_MODE_PVE_HSBL = "PVE_HuangShaBaiLian"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
 
 #======================================================
@@ -68,6 +69,9 @@ class ParamCnt:
     # 征神-雪满弓刀
     pcsOfF = 5     #PVE征神:每隔多少个周期释放一次F
     pcsOfV = 15     #PVE征神:每隔多少个周期释放一次V
+    # 征神之路，脚本运行一局游戏最多消耗的疲劳值为15
+    FatigueMin = 0
+    FatigueMax = 15
 
 #游戏相关的信息：比如界面之类的
 class GameInfo:
@@ -159,9 +163,11 @@ class WinInfo:
     Text_Char_Main_Entering = "取消"
     Area_SeasonPass_Name = (98, 0, 200, 26)             #OCR识别该区域，获得通行证/战令名称：“永昼通信证”
     Area_SeasonPass_Level = (106, 23, 192, 41)          #OCR识别该区域，获得通行证/战令等级：“赛季等级XX”
-    #——————PVE雪满弓刀——————
+    #——————PVE雪满弓刀/黄沙百炼——————
     Area_Char_PVE_Main = (1054, 641, 1226, 682)     # 特征区域
     Text_Char_PVE_Main = "开始征神"
+    # Area_PVE_Fatigue = (1190, 542, 1220, 566)       # 当前疲劳值的区域。只适用于四位数的疲劳。作废
+    Area_PVE_Fatigue_All = (1190, 542, 1252, 566)  # 当前疲劳值的区域，格式：203/2400
     # —不勾选“疲劳增长”时，会有弹窗—
     Area_Char_PVE_Main_Sure = (496, 325, 789, 373)  #“当前挑战不再积累疲劳，但不产生掉落”
     Text_Char_PVE_Main_Sure = "累积疲劳"    # 注：苍渊赛季为“积累疲劳”，雄威赛季为“累积疲劳”
@@ -280,6 +286,8 @@ class WinInfo:
     Text_Char_Game_in_PVE_5 = "通关成功"
     Area_PVE_Return_Home_From_Game = (603, 495, 678, 517)
     Text_PVE_Return_Home_From_Game = "返回大厅"
+    Area_PVE_Return_Home_From_Game_Sure = (530, 402, 582, 428)
+    Text_PVE_Return_Home_From_Game_Sure = "确定"  #也可以空格确定
     # PVE黄沙百炼
     Area_Char_Game_in_PVE_HSBL_1 = (1214, 687, 1250, 711)  # 特征区域，可以跳过的过渡动画
     Text_Char_Game_in_PVE_HSBL_1 = "跳过"

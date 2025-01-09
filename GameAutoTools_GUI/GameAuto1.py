@@ -4,11 +4,10 @@ from Settings_Server import *
 from FaultMonitor import *
 from OPFuncs import *
 
-
 # OP的基础方法
 class Automation:
     # 初始化
-    def __init__(self):
+    def  __init__(self):
 
         # ——————————窗口相关的属性——————————
         self.hwnd = 0  # 窗口句柄
@@ -36,6 +35,7 @@ class Automation:
         self.gameTimeEnd = 0  # 本局游戏应该在什么时间结束，即当前时间+游戏剩余时间
         self.gameTimeUsed = -1  # 本局游戏已用时间，单位秒
         self.EXP = 0  # 脚本本次运行所获取的所有经验值
+        self.fatigue = 0 # PVE模式下，当前疲劳值（注：总疲劳为2400）
 
         self.UI = GameInfo.UI_Err_Other  # 游戏的界面类型，-1为非法值表示未获取到界面信息
         self.UI_valid = GameInfo.UI_Err_Other  # 游戏的有效界面类型，-1为非法值表示未获取到界面信息
@@ -681,10 +681,10 @@ class Automation:
 
     def Battle_In_HSBL(self, mouse_ratio:float):
         # ——————————————————————————————————————————————————————————————————————————————————————————————
-        # 以下所有写死的数据，均是基于：笔记本电脑【ThinkBook16P】
+        # 以下所有写死的数据，均是基于笔记本电脑【ThinkBook16P】
         # 游戏设置中视角灵敏度：50， 视角灵敏度(射击模式)：20，
-        # 鼠标DPI：2300，
-        # Windows11系统设置中鼠标速度：10， 控制面板的指针选项的“选择指针移动速度”为第6格的位置，并且勾选“提高指针精确度”
+        # 鼠标DPI：2000，
+        # Windows11系统设置中鼠标速度：10， 控制面板的指针选项的“选择指针移动速度”为第6格的位置，并且关闭“增强指针精确度”
         # ——————————————————————————————————————————————————————————————————————————————————————————————
         if PC_NAME == "MyServer":
             OP.Sleep(3000)  #由于MyServer处理器和显卡性能极差，故需要等待3秒，让地图加载完毕
@@ -732,9 +732,9 @@ class Automation:
             OP.Sleep(2000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
         elif PC_NAME != "MyServer":   # MyServer性能太差，钩锁会导致卡顿。故不使用钩锁。只落到那个空中平台上，然后奔跑到P7
             OP.Sleep(3000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
-        KeyOp.PressKey(OPKeyCode.C) #有可能挂在钩锁点，所以需要C下坠。
-        OP.Sleep(1500)
-        # ————————5、前进到P7，调整视角，火炮攻击3次———————————————————————————————————————————————————
+        # KeyOp.PressKey(OPKeyCode.C) #有可能挂在钩锁点，所以需要C下坠。：后来发现，如果挂上去了，就算下坠下来，方向也变了。所以没必要。
+        # OP.Sleep(1500)
+        # ————————5、前进到P7，调整视角，火炮攻击2次———————————————————————————————————————————————————
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         if PC_NAME == "ThinkBook16P":
             KeyOp.HoldTwoKey(OPKeyCode.W, 3650, OPKeyCode.Shift, 1000)  # 奔跑到P7，由于钩锁点变更，需要奔跑更远
@@ -749,10 +749,12 @@ class Automation:
         # MouseOp.MoveR(-round(415 * mouse_ratio), round(90 * mouse_ratio))  # 视角往左下移动，瞄准野怪
         MouseOp.MoveR(-round(415 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
         OP.Sleep(500)
-        for fireCnt in range(1, 3, 1):  # 火炮攻击2次。其实无需火炮，F技能火球就能击杀小怪。但是稳妥起见，火炮攻击。
-            MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1500, 1800))
+        # for fireCnt in range(1, 3, 1):  # 火炮攻击2次。其实无需火炮，F技能火球就能击杀小怪。但是稳妥起见，火炮攻击。
+        #     MouseOp.LeftClickNow()
+        #     OP.Sleep(random.randint(1500, 1800))
         KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球
+        OP.Sleep(300)
+        KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球。防止F失败，多F一次
         OP.Sleep(1200)
         # MouseOp.MoveR(-160, 0)  # 视角往左移动
         MouseOp.MoveR(-round(150 * mouse_ratio), 0)  # 视角往左移动
@@ -760,22 +762,31 @@ class Automation:
         # ————————6、前进到P8，调整视角，前进到P9————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         if PC_NAME == "ThinkBook16P":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 1150, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
+            # KeyOp.HoldTwoKey(OPKeyCode.W, 1150, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
+            KeyOp.HoldTwoKey(OPKeyCode.W, 2200, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
         elif PC_NAME == "Desktop":
             KeyOp.HoldTwoKey(OPKeyCode.W, 1230, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
         elif PC_NAME == "MyServer":
             KeyOp.HoldTwoKey(OPKeyCode.W, 1182, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-        OP.Sleep(2600)  # 这里到达P8是个下坡，可能会有滑落动作，等2秒
-        # MouseOp.MoveR(-200, -55)   #视角往左上移动
+        # OP.Sleep(2600)  # 这里到达P8是个下坡，可能会有滑落动作，等2秒
+        OP.Sleep(600)  # P8现在是挂壁状态
         if PC_NAME == "ThinkBook16P":
             MouseOp.MoveR(-round(190 * mouse_ratio * 1.12), -round(55 * mouse_ratio * 1.1))  # 视角往左上移动
         elif PC_NAME == "Desktop":
             MouseOp.MoveR(-190, -55)  # 视角往左上移动
         elif PC_NAME == "MyServer":
             MouseOp.MoveR(-round(193 * mouse_ratio), -round(55 * mouse_ratio))  # 视角往左上移动
+        OP.Sleep(500)
+        # 到达P8后，如果继续往前，可能会出现卡脚的情况，必须先往左转走两步，再复原视角，解决卡脚问题。
+        KeyOp.PressKey(OPKeyCode.C)  # 挂壁，要先落下，才能行走
         OP.Sleep(800)
+        MouseOp.MoveR(-580, 0)  # 视角往左移动
+        KeyOp.HoldKey(OPKeyCode.W, 660) # 走一下
+        OP.Sleep(300)
+        MouseOp.MoveR(580, 0)  # 视角往右移动
+        OP.Sleep(300)
         if PC_NAME == "ThinkBook16P":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 725, OPKeyCode.Shift, 1000)  # 到达P9
+            KeyOp.HoldTwoKey(OPKeyCode.W, 400, OPKeyCode.Shift, 1000)  # 到达P9
         elif PC_NAME == "Desktop":
             KeyOp.HoldTwoKey(OPKeyCode.W, 680, OPKeyCode.Shift, 1000)  # 到达P9
         elif PC_NAME == "MyServer":
@@ -788,21 +799,21 @@ class Automation:
         elif PC_NAME == "Desktop" or PC_NAME == "MyServer":
             MouseOp.MoveR(round(260 * mouse_ratio), -round(20 * mouse_ratio))  # 视角往右上移动
         OP.Sleep(1500)
-        for fireCnt in range(1, 10, 1):  # 火炮攻击9次(可能有天赐武备匣效果)
+        for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
             OP.Sleep(random.randint(1500, 1800))
         OP.Sleep(1000)
         # ————————7、继续待在P9原地不动，调整视角，火炮远程攻击———————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         MouseOp.MoveR(-round(106 * mouse_ratio), round(60 * mouse_ratio))  # 视角左下移动
-        OP.Sleep(1000)
+        OP.Sleep(800)
         if PC_NAME == "MyServer":
             OP.Sleep(1000)
-        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
-        OP.Sleep(600)
-        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
-        OP.Sleep(2000)
-        for fireCnt in range(1, 12, 1):  # 火炮攻击11次(可能有天赐武备匣效果)
+        # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
+        # OP.Sleep(600)
+        # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
+        # OP.Sleep(2000)
+        for fireCnt in range(1, 8, 1):  # 火炮攻击7次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
             OP.Sleep(random.randint(1500, 1800))
         if PC_NAME == "MyServer":
@@ -811,14 +822,22 @@ class Automation:
         OP.Sleep(600)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
         OP.Sleep(2000)
-        for fireCnt in range(1, 9, 1):  # 火炮攻击8次(可能有天赐武备匣效果)
+        for fireCnt in range(1, 11, 1):  # 火炮攻击10次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1500, 1800))
+            OP.Sleep(random.randint(1750, 1900))
+            # print(f"fireCnt={fireCnt}")
+        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
+        OP.Sleep(600)
+        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
+        OP.Sleep(2000)
+        for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
+            MouseOp.LeftClickNow()
+            OP.Sleep(random.randint(1750, 1900))
         # ————————9、调整视角，前往P10，开两炮，再调整视角——————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         OP.Sleep(1500)
         if PC_NAME == "ThinkBook16P":
-            MouseOp.MoveR(-round(78 * mouse_ratio * 0.90), 0)  # 视角平行往左移动
+            MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
         elif PC_NAME == "Desktop":
             MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
         elif PC_NAME == "MyServer":
@@ -828,35 +847,42 @@ class Automation:
         OP.Sleep(600)
         # ===改进代码：到达P10后，向3个方向攻击（3个方向的角度和为355），提高成功几率（不能保证一定成功）===
         MouseOp.MoveR(round(60 * mouse_ratio), -round(75 * mouse_ratio))  # 视角往右移动10度、往上移动一些
-        OP.Sleep(888)
-        MouseOp.LeftClickNow()  # 火炮攻击
+        OP.Sleep(1000)
+        # MouseOp.LeftClickNow()  # 火炮攻击
+        # OP.Sleep(2000)
+        MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
-        MouseOp.MoveR(round(120 * mouse_ratio), 0)  # 视角平行往右移动20度
-        OP.Sleep(888)
-        MouseOp.LeftClickNow()  # 火炮攻击
-        OP.Sleep(2000)
+        # MouseOp.MoveR(round(120 * mouse_ratio), 0)  # 视角平行往右移动20度
+        # OP.Sleep(888)
         if PC_NAME == "ThinkBook16P":
-            MouseOp.MoveR(round(175 * mouse_ratio), 0)  # 视角平行往右移动60度
+            MouseOp.MoveR(round(298 * mouse_ratio), 0)  # 视角平行往右移动60度
         elif PC_NAME == "Desktop":
-            MouseOp.MoveR(round(175 * mouse_ratio), 0)  # 视角平行往右移动60度
+            MouseOp.MoveR(round(295 * mouse_ratio), 0)  # 视角平行往右移动60度
         elif PC_NAME == "MyServer":
-            MouseOp.MoveR(round(185 * mouse_ratio), 0)  # 视角平行往右移动60度
-        OP.Sleep(888)
-        MouseOp.LeftClickNow()  # 火炮攻击
-        OP.Sleep(888)
-        MouseOp.LeftClickNow()  # 火炮攻击（有时候会不生效，多按一次）
+            MouseOp.MoveR(round(305 * mouse_ratio), 0)  # 视角平行往右移动60度
+        OP.Sleep(1000 )
+        # MouseOp.LeftClickNow()  # 火炮攻击
+        # OP.Sleep(1650)
+        MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
+        # KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球。减少漏网之鱼的可能性。不能用火球，这会让人物自动前进一小步。。。
+        # OP.Sleep(1200)
+        MouseOp.MoveR(150, 0)  # 视角平行往右移动
+        OP.Sleep(1000)
+        MouseOp.LeftClickNow()  # 火炮攻击一次
+        OP.Sleep(2300)
+        MouseOp.MoveR(-150, 0)  # 视角平行往左移动
+        OP.Sleep(1000)
 
         # ————————10、前往P12，并E开箱————————————————————————————————————————————————————————————————————
-        if PC_NAME == "ThinkBook16P":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 1140, OPKeyCode.Shift, 1000)
-        elif PC_NAME == "Desktop":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 830, OPKeyCode.Shift, 1000)
-        elif PC_NAME == "MyServer":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 1140, OPKeyCode.Shift, 1000)
-        OP.Sleep(200)
-        KeyOp.PressKey(OPKeyCode.E)
-        OP.Sleep(500)
+        Tools.RunAndE(1000, 120)    # 一边跑，一边E
+        # if PC_NAME == "ThinkBook16P":
+        #     KeyOp.HoldTwoKey(OPKeyCode.W, 950, OPKeyCode.Shift, 1000)
+        # elif PC_NAME == "Desktop":
+        #     KeyOp.HoldTwoKey(OPKeyCode.W, 830, OPKeyCode.Shift, 1000)
+        # elif PC_NAME == "MyServer":
+        #     KeyOp.HoldTwoKey(OPKeyCode.W, 1140, OPKeyCode.Shift, 1000)
+        OP.Sleep(100)
         KeyOp.PressKey(OPKeyCode.E) # 多E一次
         OP.Sleep(1000)
         # ————————11、ESC退出、点击“返回大厅”、空格确定————————————————————————————————————————————————————————————————————
@@ -865,14 +891,19 @@ class Automation:
         OP.Sleep(1500)
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         if WinInfo.Text_PVE_Return_Home_From_Game in GetScrInfo.ocrAreaText(WinInfo.Area_PVE_Return_Home_From_Game):
-            # 如果识别到返回大厅
+            # 如果识别到“返回大厅”，点击“返回大厅”
             MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Return_Home_From_Game, self.ratio)
             OP.Sleep(1500)
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        KeyOp.PressKey(OPKeyCode.Space)
+        if WinInfo.Text_PVE_Return_Home_From_Game_Sure in GetScrInfo.ocrAreaText(WinInfo.Area_PVE_Return_Home_From_Game_Sure):
+            # 如果识别到“确定”，点击“确定”
+            MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Return_Home_From_Game_Sure, self.ratio)
+            OP.Sleep(1500)
+        KeyOp.PressKey(OPKeyCode.Space) #保险起见，再来空格确定一次
         OP.Sleep(1000)
 
-    def Battle_HSBL_Desktop(self):
+    # 仅适配台式机Desktop
+    def Battle_In_HSBL_Desktop(self):
         # ——————————————————————————————————————————————————————————————————————————————————————————————
         # 以下所有写死的数据，均是基于：台式机【Desktop】
         # 游戏设置中视角灵敏度：50， 视角灵敏度(射击模式)：20，
@@ -986,6 +1017,10 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.Space)
         OP.Sleep(1000)
 
+    # 鸿溟之难-噩梦。轮椅套。
+    def Battle_In_HMZN(self):
+        pass
+
     # ==========PVE雪满弓刀===================================
     def Handle_PVE_Game_In_1_W(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
@@ -1061,6 +1096,15 @@ class Automation:
         self.UserPause()
         self.battleCnt = 0
         self.gameCnt += 1
+        curFatigue = self.getCurFatigue()
+        usedFatigue = curFatigue - self.fatigue
+        if ParamCnt.FatigueMin <= usedFatigue <= ParamCnt.FatigueMax:   # 一局游戏消耗的疲劳值应当在合理范围内，否则不做记录
+            logging.info(f"当前疲劳值：{curFatigue}，上一局游戏消耗疲劳：{curFatigue - self.fatigue}")
+            if usedFatigue == 0:
+                logging.error(f"上局游戏脚本运行出错，未能消耗疲劳值！")
+        else:
+            logging.info(f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
+        self.fatigue = curFatigue
         logging.info(f"当前游戏局数：{self.gameCnt}")
         # 如果游戏局数每达到x盘，就休眠120秒
         if self.gameCnt % 100 == 0:
@@ -1068,6 +1112,25 @@ class Automation:
             OP.Sleep(120000)
         MouseOp.LeftClickAreaRandom(WinInfo.Area_Char_PVE_Main, self.ratio)
         OP.Sleep(12000)  # 点击“开始征神”后，休眠数秒。防止一直点击。
+
+    # 获取疲劳值
+    @staticmethod
+    def getCurFatigue()->int:
+        fatigueStr = GetScrInfo.ocrAreaText(WinInfo.Area_PVE_Fatigue_All)   #当前疲劳值，格式：203/2400
+        fatigueStr_int = 0  #默认0
+        # 判断字符串中是否包含 "/"
+        if '/' in fatigueStr:
+            # 使用正则表达式提取 "/" 前面的数字
+            match = re.match(r"(\d+)/", fatigueStr)
+            if match:
+                fatigueStr_int = match.group(1)
+        # fatigueStr_int = re.findall(r"\d+", fatigueStr)[0]
+        try:
+            curFatigue = int(fatigueStr_int)
+        except ValueError:
+            print(f"Error: '{fatigueStr_int}' is not a valid integer.")
+            curFatigue = 0
+        return curFatigue
 
     def Handle_PVE_Main_Sure(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
@@ -1468,6 +1531,35 @@ class Automation:
             logging.warning(f"OCR识别通行证经验值失败，记为默认经验值{ParamCnt.EXE_DEFAULT_WJSL}。")
         return EXE1
 
+class Tools:
+    # Shift+W奔跑的同时不断按E
+    # runTime：奔跑时间，intervalE：E的间隔时间
+    @staticmethod
+    def RunAndE(runTime: int, intervalE: int):
+        if runTime < intervalE:
+            logging.error(f"输入参数非法：runTime < intervalE")
+            return False
+        # 先按住keyCode1,然后按住keyCode2，再抬起keyCode2，再抬起keyCode1
+        OP.Sleep(OPTime.slp_cmd / 2)
+        if OP.KeyDown(OPKeyCode.W) == 1:
+            if OP.KeyDown(OPKeyCode.Shift) == 1:
+                OP.Sleep(1000)   #按住Shift 0.5秒后，可以开始奔跑
+                if OP.KeyUp(OPKeyCode.Shift) == 1:
+                    cnt = int(runTime / intervalE)
+                    # print(f"cnt={cnt}")
+                    idx = 0
+                    while idx < cnt:
+                        OP.Sleep(intervalE)
+                        if OP.KeyPress(OPKeyCode.E) == 1:
+                            print(f"E成功{idx + 1}次")
+                        idx += 1
+                    # print(f"退出循环，即将休眠{runTime - cnt * intervalE}")
+                    OP.Sleep(runTime - cnt * intervalE)
+                    if OP.KeyUp(OPKeyCode.W) == 1:
+                        # print(f"函数成功！")
+                        return True
+        logging.error(f"RunAndE操作W失败")
+        return False
 
 def RunAuto():
     auto = Automation()

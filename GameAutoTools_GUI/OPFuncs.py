@@ -897,6 +897,8 @@ class KeyOp:
         logging.error(f"HoldKey操作{keyCode1}失败")
         return False
 
+
+
     # 检测到用户按下某个键，返回True
     @staticmethod
     def DetectKey(KeyCode:int):
