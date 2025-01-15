@@ -156,6 +156,7 @@ class OPKeyCode:
     F10 = 121
     F11 = 122
     F12 = 123
+    Tilde = 192 # 键盘ESC下方那个键波浪号～
 
 # 时间相关的参数
 class OPTime:
@@ -496,6 +497,22 @@ class GetScrInfo:
             text = OP.OcrFromFile(tmpPicName, OPVal.color_format, OPVal.sim_OCR)
             # text = OP.OcrAuto(area[0], area[1], area[2], area[3], OPVal.sim_OCR)
             # logging.info(f"get_area_text：OCR识别区域{area}：{text}。")
+        return text
+
+    # 快速获取指定区域内的文字：
+    @staticmethod
+    def ocrAreaTextQuick1(area: list[4]) -> str:
+        # OP.Sleep(100)
+        text = OP.OcrAuto(area[0], area[1], area[2], area[3], 0.75)
+        # logging.info(f"get_area_text：OCR识别区域{area}：{text}。")
+        return text
+
+    # 快速获取指定区域内的文字：
+    @staticmethod
+    def ocrAreaTextQuick2(area: list[4]) -> str:
+        # OP.Sleep(100)
+        text = OP.Ocr(area[0], area[1], area[2], area[3],"bed0d0-000000" , 0.75)
+        # logging.info(f"get_area_text：OCR识别区域{area}：{text}。")
         return text
 
     # 对指定区域进行截图，如果截图成功则返回1，失败返回0：每次截图耗时约7ms～15ms

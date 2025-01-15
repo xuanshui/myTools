@@ -1,15 +1,15 @@
 #本文件是一些参数设置
 from OPFuncs import OPTime, gameLauncherPath
 
-#游戏模式：无尽试炼、PVE征神-雪满弓刀
-# GAME_MODE_ALL= ("PVP_WJSL", "PVE_XueManGongDao")
-GAME_MODE_PVP_WJSL = "PVP_WJSL"             #无尽试炼
-GAME_MODE_PVE_XMGD = "PVE_XueManGongDao"    #PVE征神，雪满弓刀【注：难度为普通，英雄只能选宁红夜，魂玉不能需要振刀等操作\否则死掉一条命后，没法继续操作】
-GAME_MODE_PVE_HMZN = "PVE_HongMingZhiNan"   #PVE征神，鸿溟之难【注：难度为噩梦，英雄只能选宁红夜，魂玉为：沼生、瘴煞、祛毒、蚀骨春、苍牙元素、神躯】
-GAME_MODE_PVE_HSBL = "PVE_HuangShaBaiLian"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
+#游戏模式：【注】每次修改/新增模式时，记得在函数checkGameMode中进行OCR识别纠错
+GAME_MODE_PVP_WJSL = "无尽试炼"             #无尽试炼
+GAME_MODE_PVE_XMGD = "雪满弓刀"    #PVE征神，雪满弓刀【注：难度为普通，英雄只能选宁红夜，魂玉不能需要振刀等操作\否则死掉一条命后，没法继续操作】
+GAME_MODE_PVE_HMZN = "鸿溟之难"   #PVE征神，鸿溟之难【注：难度为噩梦，英雄只能选宁红夜，魂玉为：沼生、瘴煞、祛毒、蚀骨春/疾凝诀、苍牙元素、神躯/坚甲】
+GAME_MODE_PVE_WXJL = "万象降临" #PVE征神，万象降临【注：难度为噩梦，英雄只能选宁红夜，魂玉为：沼生、瘴煞、祛毒、蚀骨春/疾凝诀、苍牙元素、神躯/坚甲】
+GAME_MODE_PVE_HSBL = "黄沙百炼"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
 
 #======================================================
-GAME_MODE_CUR = GAME_MODE_PVE_HSBL          #当前游戏模式
+GAME_MODE_CUR = GAME_MODE_PVE_HMZN          #当前游戏模式
 #======================================================
 
 # 下面是一些宏定义
@@ -37,7 +37,9 @@ class ParamTime(OPTime):
     default_InGame_LefTimeS_MAX = 10  # 如果游戏剩余时间大于等于10秒，就不进行完整的get_cur_UI()函数获取界面信息
 
     # ——————————————PVE雪满弓刀——————————————
-    default_InGame_TimeUsed_PVE_XMGD = 20   #打一局PVE雪满弓刀-普通难度，最少耗时20秒？要根据神识等级确定
+    max_InGame_Time_PVE_XMGD = 120          #打一局PVE雪满弓刀-普通难度，最多要2分钟
+    # default_InGame_TimeUsed_PVE_XMGD = 20   #打一局PVE雪满弓刀-普通难度，最少耗时20秒？要根据神识等级确定
+    # 玩家神识1115，BOSS神识820，用时4分19秒/5分8秒（连续冰爆+爆冰决+寒天劲+封霜劲+苍牙元素+天蚕茧）
     slp_After_Select_Hero = 20000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
     walkToEntry = 4000    #从出生点走到传送点，耗时x秒
     walkToRunShift = 1500  # 按住Shift后，开始奔跑的时间。
@@ -49,6 +51,14 @@ class ParamTime(OPTime):
     walkToPoint1 = 4000  # 从出生点走到传送点，耗时x秒
     walkToRunShiftDefault = 1500  # 按住Shift后，开始奔跑的时间。
     slpAfterFire = 1000  # 发射火炮后的固定休眠时间
+
+    # ——————————————PVE鸿溟之难——————————————
+    max_InGame_Time_PVE_HMZN = 1000  #局内最多战斗16分钟40秒。达到这个时间就退出，无论是否通关成功。
+
+    # ——————————————PVE万象降临——————————————
+    max_InGame_Time_PVE_WXJL = 600  # 局内最多战斗10分钟。达到这个时间就退出，无论是否通关成功。
+    # 玩家神识1114，BOSS神识820，用时7分40秒（连续冰爆+爆冰决+寒天劲+苍牙元素+天蚕茧+神躯），
+    # 玩家神识1115，BOSS神识820，用时4分19秒/5分8秒（连续冰爆+爆冰决+寒天劲+封霜劲+苍牙元素+天蚕茧）
 
 
 # 计数相关参数
@@ -89,6 +99,7 @@ class GameInfo:
     UI_Err_Other = -1                #未记录的其他错误界面
     UI_Err_Main_LoseServerConnect = -2    #主界面错误：提示，失去服务器连接
     UI_Err_LogIn_AccountError = -3       #登录界面2错误：提示，账号异常
+    UI_Err_Main_PVEWarehouseFull = -4   #主界面错误：提示，临时仓库中存在未领取的征神魂玉（征神仓库已满）
     #——————————————————————游戏内————————————————————————
     UI_PVP_Game_In_WJSL = 50  # 游戏内界面：无尽试炼
     # UI_PVP_Game_Dad = 51  # 游戏内界面，死亡，待返魂
@@ -100,6 +111,8 @@ class GameInfo:
     UI_PVE_Game_In_5_Succeed = 64  # 游戏内界面：PVE征神-雪满弓刀，通关成功，可以ESC返回大厅
     UI_PVE_HSBL_Game_In_1_ESC = 65  # 游戏内界面：PVE征神-黄沙百炼，过渡界面
     UI_PVE_HSBL_Game_In_2_Battle = 66  # 游戏内界面：PVE征神-黄沙百炼
+    UI_PVE_HMZN_Game_In_Battle = 67  # 游戏内界面：PVE征神-鸿溟之难
+    UI_PVE_WXJL_Game_In_Battle = 68  # 游戏内界面：PVE征神-万象降临
 
     # ——————————————————————游戏登录界面————————————————————————
     UI_LogIn_Announcement = 1     #登录界面1：公告
@@ -157,6 +170,7 @@ class WinInfo:
     Pic_Char_Game_Start_2_Account_Err = "/Pic/gameStart2AccountErr.bmp"
 
     # ============主界面======================
+    Area_Cur_GameMode = (1020, 602, 1179, 632)  #在主界面OCR此区域得到当前游戏模式：雪满弓刀/黄沙百炼/万象降临/鸿溟之难……
     #——————无尽试炼——————
     Area_Char_PVP_Main = (1061,644,1211,686)   #该界面的特征区域
     Text_Char_Main_Prepare = "开始游戏"                 #如果是这个界面，特征区域里必然出现的字符串
@@ -182,10 +196,11 @@ class WinInfo:
     Area_Char_Daily_Msg = (1112, 695, 1195, 718)    #识别该区域，可以得到字符串“今日不再提示”。这个界面使用ESC跳过。
     Text_Char_Daily_Msg = "今日不再提示"
     Point_Daily_Msg_Skip = [1103, 705]              #点击该点，可以勾选中“今日不再提示”
-    # =====异常界面=====
+    # =====异常/提示界面=====
     Area_Char_Main_Err_LoseServerConnect = (340, 316, 938, 374)
     Text_Char_Main_Err_LoseServerConnect = "失去服务器连接"
-
+    Area_Char_Main_Tip_PVEWarehouseFull = (124, 310, 1114, 392)
+    Text_Char_Main_Tip_PVEWarehouseFull = "临时仓库中存在未领取的征神魂玉" #仓库已满
     # ============英雄选择界面======================
     # 无尽试炼
     Area_Char_Select_Hero = (1,1,139,49)
@@ -269,7 +284,8 @@ class WinInfo:
     Area_Random_left_move = [240, 180, 900, 550]  # 游戏局内时，鼠标在该区域随机移动
     Area_Time_Left = (1155, 0, 1214, 23)  # 在游戏内，该区域显示本局游戏的剩余时间，格式为“12:23”
     # PVE雪满弓刀
-    Area_Char_Game_In_PVE_1 = (59, 60, 130, 115)    #特征区域：OCR识别该区域应该是势比登天
+    Area_Char_Game_In_PVE_1 = (59, 83, 130, 114)    #特征区域：OCR识别该区域应该是势比登天
+    #Area_Char_Game_In_PVE_1 = (59, 83, 130, 114)    #特征区域：OCR识别该区域应该是势比登天
     Text_Char_Game_In_PVE_1 = "势比登天"
     #Pic_Char_Game_In_PVE_2 = "/Pic/Char_Game_In_PVE_2.bmp"  # 特征图片，如果找到这个图片，就认为是游戏内界面2
     Area_Char_Game_in_PVE_3 = (1214, 687, 1250, 711) #特征区域，可以跳过的过渡动画
@@ -293,6 +309,16 @@ class WinInfo:
     Text_Char_Game_in_PVE_HSBL_1 = "跳过"
     Area_Char_Game_In_PVE_HSBL_2 = (59, 60, 130, 115)  # 特征区域：OCR识别该区域应该是寻找出路
     Text_Char_Game_In_PVE_HSBL_2 = "寻找出路"
+    # PVE鸿溟之难
+    Area_Char_Game_In_PVE_HMZN_1 = (59, 60, 130, 115)  # 特征区域：OCR识别该区域应该是潮汐之间
+    Text_Char_Game_In_PVE_HMZN_1 = "潮汐之间"
+    Area_Char_Game_In_PVE_HMZN_2_BossName = (396, 0, 520, 30)  # 特征区域：OCR识别该区域得到BOSS名称，总共三种：魈，兽，本体
+    Area_Char_Game_In_PVE_HMZN_2_BossNameBenTi = (466, 0, 520, 30)  # 特征区域：OCR识别该区域得到BOSS名称，是否为本体？只能判断是不是本体
+    # PVE万象降临
+    Area_Char_Game_In_PVE_WXJL_1 = (58, 88, 134, 116)  # 特征区域：OCR识别该区域应该是落日之火
+    Text_Char_Game_In_PVE_WXJL_1 = "落日之火"
+    Area_Char_Game_In_PVE_WXJL_2_BossName = (386, 0, 489, 30)  # 特征区域：OCR识别该区域得到BOSS名称，总共三种：魈，兽，本体
+
 
 
     # ============ESC弹窗选择界面======================
