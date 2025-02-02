@@ -171,6 +171,11 @@ class Automation:
                 self.realGameMode = "雪满弓刀"
             elif "万象" in self.realGameMode:
                 self.realGameMode = "万象降临"
+            elif "无尽" in self.realGameMode:
+                self.realGameMode = "无尽试炼"
+            else:   #如果识别结果不在以上范围内，说明可能在游戏界面内，此时默认模式为正确的模式
+                self.realGameMode = GAME_MODE_CUR
+                return True
             if GAME_MODE_CUR in self.realGameMode:
                return True
             tryCnt += 1
@@ -255,6 +260,7 @@ class Automation:
             logging.info(f"周期计数：{self.pcsCnt}，本次界面识别耗时：{time_UI_Recognition:.6f}秒，当前界面：{self.UI}，当前有效界面：{self.UI_valid}")
             print(f"周期计数：{self.pcsCnt}，本次界面识别耗时：{time_UI_Recognition:.6f}秒，当前界面：{self.UI}，当前有效界面：{self.UI_valid}")
 
+
             # 过渡界面监控（监控过渡界面连续出现的次数）
             pSelfCheck(isUINormal, PscRltAll[FAULT_TRANSITION_UI], PscCfgAll[FAULT_TRANSITION_UI])
             # 如果错误界面达到故障次数
@@ -266,10 +272,12 @@ class Automation:
             self.dict_UIHandle.get(self.UI)()  # `()` 是用来调用函数的
             # self.dict_UIHandle.get(self.UI, self.Handle_Err_UI())()  # `()` 是用来调用函数的
 
+            # 信息申报
+            print(f"当前游戏模式：{GAME_MODE_CUR}\n当前疲劳值：{self.fatigue}")
+
     # 获取当前的界面类型：主要分2大类，游戏内，游戏外。
     # 游戏内，需要做到快速响应。游戏外，需要做到精准识别。
     def getCurUI(self) -> int:
-        print(f"当前游戏模式：{GAME_MODE_CUR}")
         # ————————————游戏内界面(无尽试炼模式)-非返魂-识别————————————
         # ===无尽试炼===
         if GAME_MODE_CUR == GAME_MODE_PVP_WJSL:
@@ -514,7 +522,8 @@ class Automation:
             # OCR识别："开始征神"
             if ((GameInfo.UI_PVE_Game_End_1 <= self.UI_valid <= GameInfo.UI_PVE_Game_End_6)
                     or self.UI_valid == GameInfo.UI_Err_Other):
-                if WinInfo.Text_Char_PVE_Main in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main):
+                if WinInfo.Text_Char_PVE_Main in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main)\
+                    or WinInfo.Text_Char_PVE_Main_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main):
                     logging.info(f"getCurUI：OCR识别到进入主界面-未点击“开始征神”")
                     return GameInfo.UI_PVE_Main_Prepare
             # 前提：上一个界面是主界面
@@ -635,9 +644,22 @@ class Automation:
         logging.info("【进入游戏局内界面：】")
         if self.getGameTimeLeft():
             logging.info(f"本局游戏剩余时间：{self.gameTimeLeftStr}")
-        # 下面进行一次右键蓄力
-        if MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio):
-            logging.info("游戏局内界面：使用右键蓄力成功")
+        # 下面进行右键三连蓄力
+        MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio)
+        OP.Sleep(300)
+        MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio)
+        OP.Sleep(300)
+        MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio)
+        OP.Sleep(300)
+        MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio)
+        if self.pcsCnt % 2 ==0:
+            OP.Sleep(300)
+            KeyOp.PressKey(OPKeyCode.F)
+            KeyOp.PressKey(OPKeyCode.F)
+        else:
+            OP.Sleep(300)
+            KeyOp.PressKey(OPKeyCode.V)
+            KeyOp.PressKey(OPKeyCode.V)
 
     # 主界面，未点击“开始游戏”
     def Handle_PVP_Main_Prepare(self):
@@ -896,9 +918,9 @@ class Automation:
         OP.Sleep(600)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
         OP.Sleep(2000)
-        for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
-            MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1750, 1900))
+        # for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
+        #     MouseOp.LeftClickNow()
+        #     OP.Sleep(random.randint(1750, 1900))
         # ————————9、调整视角，前往P10，开两炮，再调整视角——————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         OP.Sleep(1500)
@@ -918,8 +940,6 @@ class Automation:
         # OP.Sleep(2000)
         MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
-        # MouseOp.MoveR(round(120 * mouse_ratio), 0)  # 视角平行往右移动20度
-        # OP.Sleep(888)
         if PC_NAME == "ThinkBook16P":
             MouseOp.MoveR(round(298 * mouse_ratio), 0)  # 视角平行往右移动60度
         elif PC_NAME == "Desktop":
@@ -931,8 +951,6 @@ class Automation:
         # OP.Sleep(1650)
         MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
-        # KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球。减少漏网之鱼的可能性。不能用火球，这会让人物自动前进一小步。。。
-        # OP.Sleep(1200)
         MouseOp.MoveR(150, 0)  # 视角平行往右移动
         OP.Sleep(1000)
         MouseOp.LeftClickNow()  # 火炮攻击一次
@@ -1176,6 +1194,8 @@ class Automation:
         OP.Sleep(random.randint(200, 250))
         MouseOp.LeftClickNow()
         OP.Sleep(random.randint(200, 250))
+        MouseOp.LeftClickNow()
+        OP.Sleep(random.randint(200, 250))
 
     # 万象降临-噩梦。轮椅套。万象降临只需要开头锁定一次视角即可，后续不需要锁定视角
     def Battle_In_WXJL(self):
@@ -1279,12 +1299,12 @@ class Automation:
             self.ThreeAttackLeft()
             if cycCnt % 2 == 0:
                 # ————————点击F键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(200, 250))
+                OP.Sleep(random.randint(190, 210))
                 KeyOp.PressKey(OPKeyCode.F)
                 KeyOp.PressKey(OPKeyCode.F)
-            else:
+            elif cycCnt % 2 == 1:
                 # ————————点击V键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(200, 250))
+                OP.Sleep(random.randint(190, 210))
                 KeyOp.PressKey(OPKeyCode.V)
                 KeyOp.PressKey(OPKeyCode.V)
 
@@ -1307,32 +1327,6 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.Space)  # 保险起见，再来空格确定一次
         OP.Sleep(1000)
 
-    # ==========PVE雪满弓刀===================================
-    # def Handle_PVE_Game_In_1_W(self):
-    #     # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-    #     self.UserPause()
-    #     # 从出生点走到传送点，耗时10秒
-    #     # KeyOp.HoldKey(OPKeyCode.W, ParamTime.walkToEntry)
-    #     KeyOp.HoldTwoKey(OPKeyCode.W, ParamTime.walkToEntry, OPKeyCode.Shift, ParamTime.walkToRunShift)
-    #     OP.Sleep(ParamTime.slp_cmd)
-    #     # 到达传送点，按E传送
-    #     KeyOp.PressKey(OPKeyCode.E)
-    #     # 再按一次E
-    #     OP.Sleep(ParamTime.slp_cmd)
-    #     KeyOp.PressKey(OPKeyCode.E)
-    #
-    # def Handle_PVE_Game_In_2_E(self):
-    #     # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-    #     self.UserPause()
-    #     # 到达传送点，按E传送
-    #     KeyOp.PressKey(OPKeyCode.E)
-    #
-    # def Handle_PVE_Game_In_3_ESC(self):
-    #     # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-    #     self.UserPause()
-    #     # 可以ESC跳过的界面
-    #     KeyOp.PressKey(OPKeyCode.ESC)
-    #     OP.Sleep(1600)  # 休眠1秒，等待游戏加载出界面。否则会识别为过渡界面。
 
     def Handle_PVE_Game_In_4_Battle(self):
         self.Battle_Common(GAME_MODE_PVE_XMGD)
@@ -1387,6 +1381,8 @@ class Automation:
         self.UserPause()
         self.battleCnt = 0
         self.gameCnt += 1
+        logging.info(f"当前游戏局数：{self.gameCnt}")
+
         curFatigue = self.getCurFatigue()
         usedFatigue = curFatigue - self.fatigue
         if ParamCnt.FatigueMin <= usedFatigue <= ParamCnt.FatigueMax:   # 一局游戏消耗的疲劳值应当在合理范围内，否则不做记录
@@ -1396,7 +1392,13 @@ class Automation:
         else:
             logging.info(f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
         self.fatigue = curFatigue
-        logging.info(f"当前游戏局数：{self.gameCnt}")
+
+        # 如果达到限定的疲劳值，则退出脚本
+        if 0 < MAX_FATIGUE <= self.fatigue:
+            print(f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
+            logging.info(f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
+            exit(2)
+
         # 如果游戏局数每达到x盘，就休眠120秒
         if self.gameCnt % 100 == 0:
             logging.info(f"游戏局数达到100盘，休眠120秒")
@@ -1462,14 +1464,14 @@ class Automation:
     def Handle_PVE_Game_End_2(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        EXPStr = GetScrInfo.ocrAreaText(WinInfo.Area_XMGD_EXE_Area_1)
-        EXPstr_int = re.findall(r"\d+", EXPStr)[0]
-        try:
-            curEXP = int(EXPstr_int)
-        except ValueError:
-            print(f"Error: '{EXPstr_int}' is not a valid integer.")
-            curEXP = ParamCnt.EXE_DEFAULT_WJSL
-        self.EXP += curEXP
+        # EXPStr = GetScrInfo.ocrAreaText(WinInfo.Area_XMGD_EXE_Area_1)
+        # EXPstr_int = re.findall(r"\d+", EXPStr)[0]
+        # try:
+        #     curEXP = int(EXPstr_int)
+        # except ValueError:
+        #     print(f"Error: '{EXPstr_int}' is not a valid integer.")
+        #     curEXP = ParamCnt.EXE_DEFAULT_WJSL
+        # self.EXP += curEXP
         KeyOp.PressKey(OPKeyCode.Space)
 
     def Handle_PVE_Game_End_3(self):
@@ -1815,19 +1817,20 @@ class Automation:
     @staticmethod
     def getEXP_WJSJ() -> int:
         OP.Sleep(ParamTime.slp_OCR)
-        EXPstr = GetScrInfo.ocrAreaText(WinInfo.Area_WJSL_EXE_Area_1)  # 如果截图指成功
-        # logging.info(f"getEXP_WJSJ：OCR识别到经验值字符串：{EXPstr}")
-        EXPstr_int = re.findall(r"\d+", EXPstr)[0]
-        try:
-            EXE1 = int(EXPstr_int)
-        except ValueError:
-            print(f"Error: '{EXPstr_int}' is not a valid integer.")
-            EXE1 = ParamCnt.EXE_DEFAULT_WJSL
-        # logging.info(f"getEXP_WJSJ：OCR识别到经验值：{curEXP}")
-        # 经验值有自己的合理范围，如果不在合理范围内，就置0
-        if not (ParamCnt.EXE_MIN_WJSL <= EXE1 <= ParamCnt.EXE_MAX_WJSL):
-            EXE1 = ParamCnt.EXE_DEFAULT_WJSL
-            logging.warning(f"OCR识别通行证经验值失败，记为默认经验值{ParamCnt.EXE_DEFAULT_WJSL}。")
+        EXE1 = 0
+        # EXPstr = GetScrInfo.ocrAreaText(WinInfo.Area_WJSL_EXE_Area_1)  # 如果截图指成功
+        # # logging.info(f"getEXP_WJSJ：OCR识别到经验值字符串：{EXPstr}")
+        # EXPstr_int = re.findall(r"\d+", EXPstr)[0]
+        # try:
+        #     EXE1 = int(EXPstr_int)
+        # except ValueError:
+        #     print(f"Error: '{EXPstr_int}' is not a valid integer.")
+        #     EXE1 = ParamCnt.EXE_DEFAULT_WJSL
+        # # logging.info(f"getEXP_WJSJ：OCR识别到经验值：{curEXP}")
+        # # 经验值有自己的合理范围，如果不在合理范围内，就置0
+        # if not (ParamCnt.EXE_MIN_WJSL <= EXE1 <= ParamCnt.EXE_MAX_WJSL):
+        #     EXE1 = ParamCnt.EXE_DEFAULT_WJSL
+        #     logging.warning(f"OCR识别通行证经验值失败，记为默认经验值{ParamCnt.EXE_DEFAULT_WJSL}。")
         return EXE1
 
 class Tools:

@@ -9,13 +9,15 @@ GAME_MODE_PVE_WXJL = "万象降临" #PVE征神，万象降临【注：难度为�
 GAME_MODE_PVE_HSBL = "黄沙百炼"  #PVE征神，黄沙百炼【注：难度为噩梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
 
 #======================================================
-GAME_MODE_CUR = GAME_MODE_PVE_HMZN          #当前游戏模式
+GAME_MODE_CUR = GAME_MODE_PVE_WXJL          #当前游戏模式
 #======================================================
+
+MAX_FATIGUE = 1600      #如果达到指定的疲劳值，则脚本退出。如果为0，则不会判断疲劳值。
 
 # 下面是一些宏定义
 WIN_STATE_CNT = 4    #监测的窗口状态数量
 WIN_STATE_EXIST = 0        #窗口是否存在
-WIN_STATE_RESPONSE = 1     #窗口是否能正常响应
+WIN_STATE_RESPONSE = 1     # 窗口是否能正常响应
 WIN_STATE_ACTIVE = 2       #窗口是否激活
 WIN_STATE_AREA_OK = 3       #窗口四维坐标是否
 
@@ -37,7 +39,8 @@ class ParamTime(OPTime):
     default_InGame_LefTimeS_MAX = 10  # 如果游戏剩余时间大于等于10秒，就不进行完整的get_cur_UI()函数获取界面信息
 
     # ——————————————PVE雪满弓刀——————————————
-    max_InGame_Time_PVE_XMGD = 120          #打一局PVE雪满弓刀-普通难度，最多要2分钟
+    # max_InGame_Time_PVE_XMGD = 120          #打一局PVE雪满弓刀-普通难度，最多要2分钟
+    max_InGame_Time_PVE_XMGD = 300  # 小号，没魂玉，预设5分钟
     # default_InGame_TimeUsed_PVE_XMGD = 20   #打一局PVE雪满弓刀-普通难度，最少耗时20秒？要根据神识等级确定
     # 玩家神识1115，BOSS神识820，用时4分19秒/5分8秒（连续冰爆+爆冰决+寒天劲+封霜劲+苍牙元素+天蚕茧）
     slp_After_Select_Hero = 20000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
@@ -179,7 +182,8 @@ class WinInfo:
     Area_SeasonPass_Level = (106, 23, 192, 41)          #OCR识别该区域，获得通行证/战令等级：“赛季等级XX”
     #——————PVE雪满弓刀/黄沙百炼——————
     Area_Char_PVE_Main = (1054, 641, 1226, 682)     # 特征区域
-    Text_Char_PVE_Main = "开始征神"
+    Text_Char_PVE_Main = "开始征神" #队长
+    Text_Char_PVE_Main_2 = "准备" #队员
     # Area_PVE_Fatigue = (1190, 542, 1220, 566)       # 当前疲劳值的区域。只适用于四位数的疲劳。作废
     Area_PVE_Fatigue_All = (1190, 542, 1252, 566)  # 当前疲劳值的区域，格式：203/2400
     # —不勾选“疲劳增长”时，会有弹窗—
