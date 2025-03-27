@@ -918,9 +918,9 @@ class Automation:
         OP.Sleep(600)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
         OP.Sleep(2000)
-        # for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
-        #     MouseOp.LeftClickNow()
-        #     OP.Sleep(random.randint(1750, 1900))
+        for fireCnt in range(1, 5, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
+            MouseOp.LeftClickNow()
+            OP.Sleep(random.randint(1750, 1900))
         # ————————9、调整视角，前往P10，开两炮，再调整视角——————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         OP.Sleep(1500)
@@ -959,7 +959,7 @@ class Automation:
         OP.Sleep(1000)
 
         # ————————10、前往P12，并E开箱————————————————————————————————————————————————————————————————————
-        Tools.RunAndE(1000, 120)    # 一边跑，一边E
+        Tools.RunAndE(1200, 120)    # 一边跑，一边E
         # if PC_NAME == "ThinkBook16P":
         #     KeyOp.HoldTwoKey(OPKeyCode.W, 950, OPKeyCode.Shift, 1000)
         # elif PC_NAME == "Desktop":
