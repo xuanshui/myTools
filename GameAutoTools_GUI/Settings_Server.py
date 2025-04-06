@@ -1,4 +1,4 @@
-#本文件是一些参数设置
+#本文件是一些参数设置柔柔弱弱外网
 from OPFuncs import OPTime, gameLauncherPath
 
 #游戏模式：【注】每次修改/新增模式时，记得在函数checkGameMode中进行OCR识别纠错
@@ -12,7 +12,7 @@ GAME_MODE_PVE_HSBL = "黄沙百炼"  #PVE征神，黄沙百炼【注：难度为
 GAME_MODE_CUR = GAME_MODE_PVE_HSBL          #当前游戏模式
 #======================================================
 
-MAX_FATIGUE = 600      #如果达到指定的疲劳值，则脚本退出。如果为0，则不会判断疲劳值。
+MAX_FATIGUE = 590      #如果达到指定的疲劳值，则脚本退出。如果为0，则不会判断疲劳值。
 
 # 下面是一些宏定义
 WIN_STATE_CNT = 4    #监测的窗口状态数量
