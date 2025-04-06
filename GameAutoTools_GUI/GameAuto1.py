@@ -1191,11 +1191,11 @@ class Automation:
     @staticmethod
     def ThreeAttackLeft():
         MouseOp.LeftClickNow()
-        OP.Sleep(random.randint(200, 250))
+        OP.Sleep(random.randint(100, 120))
         MouseOp.LeftClickNow()
-        OP.Sleep(random.randint(200, 250))
+        OP.Sleep(random.randint(100, 120))
         MouseOp.LeftClickNow()
-        OP.Sleep(random.randint(200, 250))
+        OP.Sleep(random.randint(100, 120))
 
     # 万象降临-噩梦。轮椅套。万象降临只需要开头锁定一次视角即可，后续不需要锁定视角
     def Battle_In_WXJL(self):
@@ -1299,12 +1299,12 @@ class Automation:
             self.ThreeAttackLeft()
             if cycCnt % 2 == 0:
                 # ————————点击F键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(190, 210))
+                OP.Sleep(random.randint(100, 120))
                 KeyOp.PressKey(OPKeyCode.F)
                 KeyOp.PressKey(OPKeyCode.F)
             elif cycCnt % 2 == 1:
                 # ————————点击V键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(190, 210))
+                OP.Sleep(random.randint(100, 120))
                 KeyOp.PressKey(OPKeyCode.V)
                 KeyOp.PressKey(OPKeyCode.V)
 
