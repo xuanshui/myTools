@@ -3,33 +3,33 @@ import random   #实现随机数
 from ctypes import windll
 from Common import *
 
-# PC_NAME = "ThinkBook16P"
-# PC_NAME = "MyServer"
-# PC_NAME = "WuJie14X"
-# PC_NAME = "Desktop"
+PC_ThinkBook16P = "ThinkBook16P"
+PC_MyServer = "MyServer"
+PC_WuJie14X = "WuJie14X"
+PC_Desktop = "Desktop"
 
 #======================================================
-PC_NAME = "ThinkBook16P"                    #当前所用的电脑
+PC_NAME = PC_Desktop                    #当前所用的电脑
 #======================================================
 
-if PC_NAME == "MyServer":
+if PC_NAME == PC_MyServer:
     # 服务器
     path_tools_dll = "D:/code/Python/Tools/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "D:/code/Python/Tools/op-0.4.5_with_model/op_x64.dll"
     cur_mouse_ratio = 1.0  # 鼠标视角基数
-elif PC_NAME == "WuJie14X":
+elif PC_NAME == PC_WuJie14X:
     # 无界14
-    path_tools_dll = "E:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
-    path_opx64_dll = "E:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
-elif PC_NAME == "ThinkBook16P":
+    path_tools_dll = "D:/Code/Python/op-0.4.5_with_model/tools.dll"
+    path_opx64_dll = "D:/Code/Python/op-0.4.5_with_model/op_x64.dll"
+elif PC_NAME == PC_ThinkBook16P:
     # ThinkBook16P
     path_tools_dll = "D:/Code/Python/Test/op-0.4.5_with_model/tools.dll"
     path_opx64_dll = "D:/Code/Python/Test/op-0.4.5_with_model/op_x64.dll"
     cur_mouse_ratio = 1.32  # 鼠标视角基数
-elif PC_NAME == "Desktop":
+elif PC_NAME == PC_Desktop:
     # Desktop
-    path_tools_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/tools.dll"
-    path_opx64_dll = "F:/Code/Python/myTools/op-0.4.5_with_model/op_x64.dll"
+    path_tools_dll = "E:/Code/Python/myTools/op-0.4.5_with_model/tools.dll"
+    path_opx64_dll = "E:/Code/Python/myTools/op-0.4.5_with_model/op_x64.dll"
     cur_mouse_ratio = 1     # 鼠标视角基数
 else:
     print("path_tools_dll、path_opx64_dll路径为空！")
@@ -597,10 +597,12 @@ class WindowOp:
             OP.SetWindowState(hwnd, 12)     #激活窗口，再进行后面的测试。
             OP.SetWindowState(hwnd, 7)
             if not BaseSet.base_test_all(hwnd, ratio):
-                logging.info(f"第{tryCnt}次：绑定成功，但键鼠窗口等功能测试失败：\n【建议手动激活窗口，然后再运行脚本！】\n"
+                logging.info(f"第{tryCnt}次：绑定成功，但键鼠窗口等功能测试失败：\n"
+                             f"【建议手动激活窗口，然后再运行脚本！】或【使用管理员账户运行脚本！】\n"
                     f"\tBindWin_display：“{OPVal.BindWin_display}”，\tBindWin_mouse：“{OPVal.BindWin_mouse}”， "
                     f"\tBindWin_keypad：“{OPVal.BindWin_keypad}”，\tBindWin_mode：“{OPVal.BindWin_mode}”")
-                print(f"第{tryCnt}次：绑定成功，但键鼠窗口等功能测试失败：\n【建议手动激活窗口，然后再运行脚本！】\n"
+                print(f"第{tryCnt}次：绑定成功，但键鼠窗口等功能测试失败：\n"
+                      f"【建议手动激活窗口，然后再运行脚本！】或【使用管理员账户运行脚本！】\n"
                     f"\tBindWin_display：“{OPVal.BindWin_display}”，\tBindWin_mouse：“{OPVal.BindWin_mouse}”， "
                     f"\tBindWin_keypad：“{OPVal.BindWin_keypad}”，\tBindWin_mode：“{OPVal.BindWin_mode}”")
                 OP.Sleep(1000)  # 休眠一下

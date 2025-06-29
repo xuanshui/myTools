@@ -1,12 +1,63 @@
 import logging
+from PySide6.QtWidgets import QApplication, QMessageBox, QTextBrowser
+from PySide6.QtUiTools import QUiLoader #UI加载工具
+import sys
 import re  # 正则表达式
 from datetime import datetime, timedelta  # 获取时间
+from threading import Thread    # 线程相关，防止GUI界面在运行主函数时卡死
+# from PySide6.QtCore import (QThread, Signal)   # 线程相关，防止GUI界面在运行主函数时卡死
+import traceback    # 异常处理
+from PySide6.QtCore import Signal,QObject   # 子线程想要使用主线程的变量，必须用信号传递，不然程序必然崩溃。
 
-from Demos.security.lsastore import retrieveddata
+# from Demos.security.lsastore import retrieveddata
 
 from Settings_Server import *
 from FaultMonitor import *
 from OPFuncs import *
+
+
+
+# 自定义信号源对象类型，一定要继承自 QObject
+class   MySignal(QObject):
+    # 定义一种信号，两个参数 类型分别是： QTextBrowser 和 字符串
+    # 调用 emit方法 发信号时，传入参数 必须是这里指定的 参数类型
+    text_print = Signal(QTextBrowser, LogLevel, str)
+
+    # 还可以定义其他种类的信号
+    cyc_update = Signal(QTextBrowser, str)
+
+# 全局变量
+# 信号
+G_Sig = MySignal()
+# 控制GUI相关代码的初始化次数
+G_GuiInit = False
+
+# class WorkerThread(QThread):
+#     # 定义信号
+#     sig_updated = Signal(int)  # 进度更新
+#     sig_finished = Signal(str)  # 任务完成
+#     #sig_err_occurred = Signal(str)  # 错误发生
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.is_running = True
+#
+#     def run(self):
+#         count = 0
+#         while self.is_running:
+#             count += 1
+#             auto = Automation(PC_NAME, GAME_MODE_CUR)
+#             if auto.initSelf():
+#                 # 初始化成功，开始自动化
+#                 auto.auto_play()
+#             # 发送进度信号
+#             self.sig_updated.emit(f"周期计数{auto.pcsCnt}")
+#
+#         self.sig_finished.emit()
+#
+#     def stop(self):
+#         """停止任务"""
+#         self.is_running = False
 
 # OP的基础方法
 class Automation:
@@ -40,10 +91,14 @@ class Automation:
         self.gameTimeUsed = -1  # 本局游戏已用时间，单位秒
         self.EXP = 0  # 脚本本次运行所获取的所有经验值
         self.fatigue = 0 # PVE模式下，当前疲劳值（注：总疲劳为2400）
+        self.endFlg = False     #脚本结束标识（上位机设置）
 
         self.UI = GameInfo.UI_Err_Other  # 游戏的界面类型，-1为非法值表示未获取到界面信息
         self.UI_valid = GameInfo.UI_Err_Other  # 游戏的有效界面类型，-1为非法值表示未获取到界面信息
 
+        # ——————————平台/模式相关的属性——————————
+        self.pcName = ""          #电脑平台
+        self.gameMode = ""        #设置的游戏模式
         self.realGameMode = ""  # 游戏实际的模式
         self.curHero = ""  # 当前选择的英雄
 
@@ -115,9 +170,85 @@ class Automation:
 
         }
 
+        # ——————————图形化界面相关——————————
+        # 只能在实例化类的时候运行一次，后续调用__init__方法时不能运行
+        if not globals().get('G_GuiInit', False):
+            # 线程
+            self.thread = None
+            # 自定义信号的处理
+            G_Sig.text_print.connect(self.Info)
+            G_Sig.cyc_update.connect(self.update_cyc_info)
+            self.ui = ui_loader.load("UI/mainWindow.ui")
+            # 槽函数
+            self.ui.btn_start.clicked.connect(self.startScript)  # 开始自动操作
+            self.ui.btn_end.clicked.connect(self.endScript)  # 立即结束脚本
+            # 初始化游戏模式
+            self.ui.cBox_gameMode.addItem(GAME_MODE_PVP_WJSL)
+            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_XMGD)
+            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HMZN)
+            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_WXJL)
+            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HSBL)
+            # 初始化平台名称
+            self.ui.cBox_pcName.addItem(PC_ThinkBook16P)
+            self.ui.cBox_pcName.addItem(PC_MyServer)
+            self.ui.cBox_pcName.addItem(PC_WuJie14X)
+            self.ui.cBox_pcName.addItem(PC_Desktop)
+
+            self.ui.btn_end.setEnabled(False)  # 禁用停止按钮
+
+    def startScript(self):
+        self.ui.btn_start.setEnabled(False)  # 同时运行的脚本个数只能为1
+        self.ui.btn_end.setEnabled(True)  # 使能停止按钮
+
+        self.thread = Thread(target=self.mainThread,
+                        # args=('参数1', '参数2'),
+                        daemon=True
+                        )
+        self.thread.start()
+
+    def mainThread(self):
+        if self.initSelf():
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的游戏模式：{self.gameMode}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的电脑平台：{self.pcName}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "脚本已启动！")
+            self.auto_play()
+        else:
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "initSelf初始化失败，无法启动脚本！")
+
+    def endScript(self):
+        # 结束脚本
+        self.endFlg = True
+        self.ui.btn_start.setEnabled(True)  # 使能开始按钮
+        self.ui.btn_end.setEnabled(False)  # 禁用停止按钮
+
+
+    # ——GUI相关函数：显示信息——
+    @staticmethod
+    def Info(textBrowser, logLevel, text) -> None :
+        if logLevel == LogLevel.info:
+            print(text)
+            logging.info(text)
+            textBrowser.append(text)
+            return
+        elif logLevel == LogLevel.critical:
+            logging.critical(text)
+        elif logLevel == LogLevel.error:
+            logging.error(text)
+        elif logLevel == LogLevel.warning:
+            logging.warning(text)
+        print(text)
+        textBrowser.append(text)
+        return
+
+    # 更新周期计数
+    @staticmethod
+    def update_cyc_info(textBrowser, msg):
+        textBrowser.setText(msg)
+
     # 游戏启动后，重新获取窗口句柄hwnd、坐标系倍率ratio、窗口信息
     def initSelf(self) -> bool:
         # 重新调用一遍，初始化类的属性
+        globals()['G_GuiInit'] = True  # GUI相关代码已初始化
         self.__init__()
 
         # 【1】如果OP绑定过窗口，解绑OP对象之前绑定的窗口
@@ -126,20 +257,21 @@ class Automation:
 
         # 【2】初始化OP对象
         if not BaseSet.initOP():  # 初始化失败，直接退出。
-            print(f"OP插件免注册操作失败！脚本已退出。\n"
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"OP插件免注册操作失败！脚本已退出。\n"
                   f"请检查OP插件的2个dll路径：\n{path_tools_dll}\n{path_opx64_dll}\n是否正确")
             exit(0)
 
         # 【3】获取窗口句柄
         self.hwnd = WindowOp.get_window_by_name(GameInfo.windowName_game)
         if self.hwnd == 0:
-            logging.error(f"未找到窗口“{GameInfo.windowName_game}”")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"未找到窗口“{GameInfo.windowName_game}”，脚本已退出。")
+            # G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"未找到窗口“{GameInfo.windowName_game}”，脚本已退出。")
             return False
 
         # 【4】绑定窗口句柄到OP对象、获取坐标系倍率
         if not WindowOp.bind_window(self.hwnd, self.ratio):
-            logging.error(f"绑定窗口失败")
-            print(f"绑定窗口失败，或获取坐标系倍率{self.ratio}失败")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"绑定窗口失败")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"绑定窗口失败，或获取坐标系倍率{self.ratio}失败")
             return False
 
         # 【5】窗口设置
@@ -152,16 +284,25 @@ class Automation:
         # mouseRatio = self.getMouseRatio()
         # 【6】判断脚本设置的游戏模式 和 游戏实际模式是否一致？不一致则直接退出
         if not self.checkGameMode():
-            logging.error(f"游戏实际模式（{self.realGameMode}）与脚本设置模式（{GAME_MODE_CUR}）不同，脚本已退出。")
-            exit(-3)
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"游戏实际模式（{self.realGameMode}）与脚本设置模式（{self.gameMode}）不同，脚本已退出。")
+            self.endScript()
         return True
 
     def checkGameMode(self):
+        # 获取设置信息
+        self.pcName = self.ui.cBox_pcName.currentText()  # 电脑平台
+        self.gameMode = self.ui.cBox_gameMode.currentText()  # 设置的游戏模式
+        if self.pcName == "":
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "未能获取到用户设置的电脑平台，脚本已退出")
+            exit(-3)
+        if self.gameMode == "":
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "未能获取到用户设置的游戏模式，脚本已退出")
+            exit(-3)
         tryCnt = 1  #最多识别6次，只要有任意一次识别正确，那就上报正常。
         while tryCnt < 7:
             OP.Sleep(tryCnt * 200)
             self.realGameMode = GetScrInfo.ocrAreaText(WinInfo.Area_Cur_GameMode)
-            print(f"第{tryCnt}次识别，游戏实际模式：{self.realGameMode}，脚本设置模式：{GAME_MODE_CUR}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"第{tryCnt}次识别，游戏实际模式：{self.realGameMode}，脚本设置模式：{self.gameMode}")
             # OCR识别可能会有个别字识别不到，故需要根据关键字纠错
             if "之难" in self.realGameMode or "鸿" in self.realGameMode:
                 self.realGameMode = "鸿溟之难"
@@ -174,9 +315,10 @@ class Automation:
             elif "无尽" in self.realGameMode:
                 self.realGameMode = "无尽试炼"
             else:   #如果识别结果不在以上范围内，说明可能在游戏界面内，此时默认模式为正确的模式
-                self.realGameMode = GAME_MODE_CUR
-                return True
-            if GAME_MODE_CUR in self.realGameMode:
+                if tryCnt >= 4 :    # 识别4次及以上都没有结果
+                    self.realGameMode = self.gameMode
+                    return True
+            if self.gameMode in self.realGameMode:
                return True
             tryCnt += 1
         return False    #6次识别均异常，报故障
@@ -193,15 +335,15 @@ class Automation:
             MouseOp.MoveRT(-1, 0)  # 每次移动两个像素点
             # 识别坐标点(639, 372)-货郎下划线的色彩，如果是红色，则停止
             curColor = OP.GetColor(639, 372)
-            # print(f"cnt={cnt}，颜色={curColor}")
+            # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"cnt={cnt}，颜色={curColor}")
             if self.is_red(curColor):
                 # 说明：经过多次测试，Desktop台式机的cnt在412～413范围内，
                 # 即左移412/413个像素点，就能到达预定位置：货郎的红色下划线。故以此作为对比基数，计算新环境下的倍率
                 # Desktop：cnt取值412～413
                 # MyServer：cnt取值405～406
                 mRatio = f"{(cnt / 412):.4f}"  # 只保留小数点后4位有效数字
-                print(f"cnt={cnt}，颜色={curColor}")
-                print(f"mRatio={mRatio}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"cnt={cnt}，颜色={curColor}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"mRatio={mRatio}")
                 break
             # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
             self.UserPause()
@@ -228,9 +370,9 @@ class Automation:
         # 1、窗口激活
         if OP.SetWindowState(self.hwnd, 12) == 1:  # 激活窗口，显示到前台
             OP.SetWindowState(self.hwnd, 7)
-            logging.info(f"激活窗口成功")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"激活窗口成功")
         else:
-            logging.error(f"激活窗口失败")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"激活窗口失败")
 
         # 2、主循环
         self.pcsCnt = 0  # 周期计数清零
@@ -242,6 +384,16 @@ class Automation:
 
             self.pcsCnt += 1  # 计数器自增
             OP.Sleep(ParamTime.sleep_main_cycle)  # 周期固定休眠时间
+
+            # 周期更新GUI界面信息
+            G_Sig.cyc_update.emit(self.ui.lEdit_cycCnt, str(self.pcsCnt))   #周期计数
+            G_Sig.cyc_update.emit(self.ui.lEdit_fatigue, str(self.fatigue)) #已用疲劳
+            G_Sig.cyc_update.emit(self.ui.lEdit_gameCnt, str(self.gameCnt)) #游戏局数
+
+            if self.endFlg: #上位机主动结束标识为真时，结束主循环
+                G_Sig.cyc_update.emit(self.ui.lEdit_cycCnt, "周期结束")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "周期任务已结束。")
+                break
 
             isUINormal = False  # 默认界面为异常，只有非过渡界面才认为是正常的
 
@@ -257,8 +409,7 @@ class Automation:
                 # 非过渡界面，才认为是有效界面
                 self.UI_valid = self.UI
                 isUINormal = True
-            logging.info(f"周期计数：{self.pcsCnt}，本次界面识别耗时：{time_UI_Recognition:.6f}秒，当前界面：{self.UI}，当前有效界面：{self.UI_valid}")
-            print(f"周期计数：{self.pcsCnt}，本次界面识别耗时：{time_UI_Recognition:.6f}秒，当前界面：{self.UI}，当前有效界面：{self.UI_valid}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"周期计数：{self.pcsCnt}，本次界面识别耗时：{time_UI_Recognition:.6f}秒，当前界面：{self.UI}，当前有效界面：{self.UI_valid}")
 
 
             # 过渡界面监控（监控过渡界面连续出现的次数）
@@ -273,14 +424,14 @@ class Automation:
             # self.dict_UIHandle.get(self.UI, self.Handle_Err_UI())()  # `()` 是用来调用函数的
 
             # 信息申报
-            print(f"当前游戏模式：{GAME_MODE_CUR}\n当前疲劳值：{self.fatigue}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前游戏模式：{self.gameMode}\n当前疲劳值：{self.fatigue}")
 
     # 获取当前的界面类型：主要分2大类，游戏内，游戏外。
     # 游戏内，需要做到快速响应。游戏外，需要做到精准识别。
     def getCurUI(self) -> int:
         # ————————————游戏内界面(无尽试炼模式)-非返魂-识别————————————
         # ===无尽试炼===
-        if GAME_MODE_CUR == GAME_MODE_PVP_WJSL:
+        if self.gameMode == GAME_MODE_PVP_WJSL:
             # 如果游戏局内时间超过XX秒，直接返回当前界面为游戏内界面。游戏内，每隔N个周期更新游戏剩余时间
             if self.gameTimeLeftS >= ParamTime.default_InGame_LefTimeS_MAX:
                 return GameInfo.UI_PVP_Game_In_WJSL
@@ -289,7 +440,7 @@ class Automation:
             OP.Sleep(ParamTime.slp_OCR)
             # 如果OCR识别到“排名”，认为是在游戏内
             if WinInfo.Text_Char_Game_In_WJSL_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_In_WJSL_1):
-                logging.info(f"getCurUI：OCR识别到进入游戏内界面，特征字：{WinInfo.Text_Char_Game_In_WJSL_1}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入游戏内界面，特征字：{WinInfo.Text_Char_Game_In_WJSL_1}")
                 return GameInfo.UI_PVP_Game_In_WJSL
 
             # 通过查找屏幕截图中是否存在特征图片护甲粉末ArmorPowder1.bmp，来判断是否为游戏内界面
@@ -297,7 +448,7 @@ class Automation:
             # 找到图片：ArmorPowder
             findPicRlt = GetScrInfo.findPic(WinInfo.Pic_Char_Game_In_WJSL_Powder1, self.clientArea)
             if findPicRlt[0] != -1:
-                logging.info(f"getCurUI：找到图片ArmorPowder2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：找到图片ArmorPowder2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
                 return GameInfo.UI_PVP_Game_In_WJSL
 
             # #通过查找屏幕截图中是否存在特征图片凝血丸BloodPill1.bmp，来判断是否为游戏内界面
@@ -305,22 +456,22 @@ class Automation:
             # 找到图片：BloodPill
             findPicRlt = GetScrInfo.findPic(WinInfo.Pic_Char_Game_In_WJSL_Pill1, self.clientArea)
             if findPicRlt[0] != -1:
-                logging.info(f"getCurUI：找到图片BloodPill2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：找到图片BloodPill2.bmp左上角坐标：{findPicRlt[1:]}：此时处于游戏内界面")
                 return GameInfo.UI_PVP_Game_In_WJSL
         # ===PVE征神，雪满弓刀===
-        elif GAME_MODE_CUR == GAME_MODE_PVE_XMGD:
+        elif self.gameMode == GAME_MODE_PVE_XMGD:
             # 前提：上一个有效界面是英雄选择界面 或 自己
             if (self.UI_valid == GameInfo.UI_PVE_Select_Hero
                     or self.UI_valid == GameInfo.UI_PVE_Game_In_4_Battle
                     or self.UI_valid == GameInfo.UI_Err_Other):
                 # 如果OCR识别到“势比登天”
                 if WinInfo.Text_Char_Game_In_PVE_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_In_PVE_1):
-                    logging.info(f"getCurUI：OCR识别到进入游戏内界面，特征字：{WinInfo.Text_Char_Game_In_PVE_1}")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入游戏内界面，特征字：{WinInfo.Text_Char_Game_In_PVE_1}")
                     return GameInfo.UI_PVE_Game_In_4_Battle
 
             # # 游戏内界面4-战斗界面：如果游戏使用时间未满XX秒，直接返回当前界面为游戏内界面-战斗界面。
             # if 0 < self.gameTimeUsed < ParamTime.default_InGame_TimeUsed_PVE_XMGD:
-            #     logging.info(f"本局游戏已用{self.gameTimeUsed:.2f}秒，"
+            #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"本局游戏已用{self.gameTimeUsed:.2f}秒，"
             #                  f"不满{ParamTime.default_InGame_TimeUsed_PVE_XMGD}秒，直接判定当前界面为游戏内战斗界面。")
             #     return GameInfo.UI_PVE_Game_In_4_Battle
 
@@ -332,7 +483,7 @@ class Automation:
             #         or self.UI_valid == GameInfo.UI_Err_Other):
             #     # 如果OCR识别到“昆仑主母”
             #     if WinInfo.Text_Char_Game_in_PVE_4 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_4):
-            #         logging.info(
+            #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
             #             f"getCurUI：OCR识别到进入游戏内界面4-战斗界面，特征字：{WinInfo.Text_Char_Game_in_PVE_4}")
             #         return GameInfo.UI_PVE_Game_In_4_Battle
             # # 游戏内界面1-未到达传送点，长按W前往传送点
@@ -340,7 +491,7 @@ class Automation:
             # if self.UI_valid == GameInfo.UI_PVE_Select_Hero or self.UI_valid == GameInfo.UI_PVE_Game_In_1_W:
             #     # 如果OCR识别到“势比登天”
             #     if WinInfo.Text_Char_Game_In_PVE_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_In_PVE_1):
-            #         logging.info(f"getCurUI：OCR识别到进入游戏内界面1-未传送，特征字：{WinInfo.Text_Char_Game_In_PVE_1}")
+            #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入游戏内界面1-未传送，特征字：{WinInfo.Text_Char_Game_In_PVE_1}")
             #         return GameInfo.UI_PVE_Game_In_1_W
 
             # # 游戏内界面3-传送后出现的过渡动画，可以ESC跳过
@@ -348,7 +499,7 @@ class Automation:
             # if self.UI_valid == GameInfo.UI_PVE_Game_In_1_W or self.UI_valid == GameInfo.UI_PVE_Game_In_3_ESC:
             #     # 如果OCR识别到“跳过”
             #     if WinInfo.Text_Char_Game_in_PVE_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_3):
-            #         logging.info(
+            #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
             #             f"getCurUI：OCR识别到进入游戏内界面3-过渡动画，特征字：{WinInfo.Text_Char_Game_in_PVE_3}")
             #         return GameInfo.UI_PVE_Game_In_3_ESC
             # # 游戏内界面5-通关成功，可以ESC返回大厅
@@ -356,14 +507,14 @@ class Automation:
             # if self.UI_valid == GameInfo.UI_PVE_Game_In_4_Battle or self.UI_valid == GameInfo.UI_PVE_Game_In_5_Succeed:
             #     # 如果OCR识别到“通关成功”
             #     if WinInfo.Text_Char_Game_in_PVE_5 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_5):
-            #         logging.info(
+            #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
             #             f"getCurUI：OCR识别到进入游戏内界面5-通关成功，特征字：{WinInfo.Text_Char_Game_in_PVE_5}")
             #         return GameInfo.UI_PVE_Game_In_5_Succeed
         # ===PVE征神，黄沙百炼===
-        elif GAME_MODE_CUR == GAME_MODE_PVE_HSBL:
+        elif self.gameMode == GAME_MODE_PVE_HSBL:
             # # 游戏内界面4-战斗界面：如果游戏使用时间未满XX秒，直接返回当前界面为游戏内界面-战斗界面。
             # if 0 < self.gameTimeUsed < ParamTime.default_InGame_TimeUsed_PVE_XMGD:
-            #     logging.info(f"本局游戏已用{self.gameTimeUsed:.2f}秒，"
+            #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"本局游戏已用{self.gameTimeUsed:.2f}秒，"
             #                  f"不满{ParamTime.default_InGame_TimeUsed_PVE_XMGD}秒，直接判定当前界面为游戏内战斗界面。")
             #     return GameInfo.UI_PVE_HSBL_Game_In_2_Battle
             # 【界面入口-2】局内战斗界面-尚未开箱
@@ -372,7 +523,7 @@ class Automation:
                     or self.UI_valid == GameInfo.UI_Err_Other):
                 # 如果OCR识别到“寻找出路”
                 if WinInfo.Text_Char_Game_In_PVE_HSBL_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_In_PVE_HSBL_2):
-                    logging.info(
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                         f"getCurUI：OCR识别到进入游戏内界面2-战斗界面，特征字：{WinInfo.Text_Char_Game_In_PVE_HSBL_2}")
                     return GameInfo.UI_PVE_HSBL_Game_In_2_Battle
             # 游戏内界面3-传送后出现的过渡动画，可以ESC跳过
@@ -380,11 +531,11 @@ class Automation:
             if self.UI_valid == GameInfo.UI_PVE_Select_Hero or self.UI_valid == GameInfo.UI_PVE_HSBL_Game_In_1_ESC:
                 # 如果OCR识别到“跳过”
                 if WinInfo.Text_Char_Game_in_PVE_HSBL_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_HSBL_1):
-                    logging.info(
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                         f"getCurUI：OCR识别到进入游戏内界面-过渡动画，特征字：{WinInfo.Text_Char_Game_in_PVE_3}")
                     return GameInfo.UI_PVE_HSBL_Game_In_1_ESC
         # ===PVE征神，鸿溟之难===
-        elif GAME_MODE_CUR == GAME_MODE_PVE_HMZN:
+        elif self.gameMode == GAME_MODE_PVE_HMZN:
             # 【界面入口-2】局内战斗界面-尚未通关或未满最大时间
             if (self.UI_valid == GameInfo.UI_PVE_HMZN_Game_In_Battle
                     or self.UI_valid == GameInfo.UI_PVE_Select_Hero
@@ -392,66 +543,66 @@ class Automation:
                 # 如果OCR识别到“潮汐之间”
                 if WinInfo.Text_Char_Game_In_PVE_HMZN_1 in GetScrInfo.ocrAreaText(
                         WinInfo.Area_Char_Game_In_PVE_HMZN_1):
-                    logging.info(
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                         f"getCurUI：OCR识别到进入游戏内界面-战斗界面，特征字：{WinInfo.Text_Char_Game_In_PVE_HMZN_1}")
                     return GameInfo.UI_PVE_HMZN_Game_In_Battle
         # ===PVE征神，万象降临===
-        elif GAME_MODE_CUR == GAME_MODE_PVE_WXJL:
+        elif self.gameMode == GAME_MODE_PVE_WXJL:
             # 【界面入口-2】局内战斗界面-尚未通关或未满最大时间
             if (self.UI_valid == GameInfo.UI_PVE_WXJL_Game_In_Battle
                     or self.UI_valid == GameInfo.UI_PVE_Select_Hero
                     or self.UI_valid == GameInfo.UI_Err_Other):
-                # 如果OCR识别到“潮汐之间”
+                # 如果OCR识别到“落日之火”
                 if WinInfo.Text_Char_Game_In_PVE_WXJL_1 in GetScrInfo.ocrAreaText(
                         WinInfo.Area_Char_Game_In_PVE_WXJL_1):
-                    logging.info(
-                        f"getCurUI：OCR识别到进入游戏内界面-战斗界面，特征字：{WinInfo.Text_Char_Game_In_PVE_HMZN_1}")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
+                        f"getCurUI：OCR识别到进入游戏内界面-战斗界面，特征字：{WinInfo.Text_Char_Game_In_PVE_WXJL_1}")
                     return GameInfo.UI_PVE_WXJL_Game_In_Battle
 
 
         # ————————————游戏结算界面识别————————————
         # ===无尽试炼===
-        if GAME_MODE_CUR == GAME_MODE_PVP_WJSL:
+        if self.gameMode == GAME_MODE_PVP_WJSL:
             # 结算界面1：“前三甲”。游戏会自动跳过该界面，脚本可以不用识别。
             # 是否为结算界面1：战斗前三甲？
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："战斗前三甲"
             if WinInfo.Text_Char_WJSL_End_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_WJSL_End_1):
-                logging.info(f"getCurUI：OCR识别到进入结算界面1：战斗前三甲")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面1：战斗前三甲")
                 return GameInfo.UI_PVP_Game_End_WJSL_1
 
             # 是否为结算界面2：积分榜？
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："返回大厅"
             if WinInfo.Text_Char_WJSL_End_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_WJSL_End_2):
-                logging.info(f"getCurUI：OCR识别到进入结算界面2：积分榜")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面2：积分榜")
                 return GameInfo.UI_PVP_Game_End_WJSL_2
 
             # 是否为结算界面3：无尽试炼等阶？
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："试炼"
             if WinInfo.Text_Char_WJSL_End_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_WJSL_End_3):
-                logging.info(f"getCurUI：OCR识别到进入结算界面3：无尽试炼等阶")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面3：无尽试炼等阶")
                 return GameInfo.UI_PVP_Game_End_WJSL_3
 
             # 当前界面是否为结算界面4-通行证经验值界面？下面两个方式都可以认为是经验结算界面
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："恭喜获得"
             if WinInfo.Text_Char_WJSL_End_4 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_WJSL_End_4):
-                logging.info(f"getCurUI：OCR识别到进入结算界面4：通行证经验")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面4：通行证经验")
                 return GameInfo.UI_PVP_Game_End_WJSL_4
 
             # 当前界面是否为结算界面5-游戏等级经验，没什么用。
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："等级"
             if WinInfo.Text_Char_WJSL_End_5 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_WJSL_End_5):
-                logging.info(f"getCurUI：OCR识别到进入结算界面5：游戏等级经验")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面5：游戏等级经验")
                 return GameInfo.UI_PVP_Game_End_WJSL_5
         # ===PVE征神，雪满弓刀/黄沙百炼/鸿溟之难/万象降临===
-        elif (GAME_MODE_CUR == GAME_MODE_PVE_XMGD
-              or GAME_MODE_CUR == GAME_MODE_PVE_HSBL
-              or GAME_MODE_CUR == GAME_MODE_PVE_HMZN
-              or GAME_MODE_CUR == GAME_MODE_PVE_WXJL):
+        elif (self.gameMode == GAME_MODE_PVE_XMGD
+              or self.gameMode == GAME_MODE_PVE_HSBL
+              or self.gameMode == GAME_MODE_PVE_HMZN
+              or self.gameMode == GAME_MODE_PVE_WXJL):
             # 结算界面1：伤害/用时
             # # OCR识别到"胜利"/“失败”，且上一个界面为游戏内成功通关
             # if self.UI_valid == GameInfo.UI_PVE_Game_In_5_Succeed:
@@ -459,104 +610,104 @@ class Automation:
                     or WinInfo.Text_Char_HSBL_End_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_1)):
                 OP.Sleep(ParamTime.slp_OCR)
                 if not WinInfo.Text_Char_XMGD_End_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_2):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面1：伤害/用时")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面1：伤害/用时")
                     return GameInfo.UI_PVE_Game_End_1
 
             # 是否为结算界面2：各类经验
             # OCR识别："战斗奖励"，且上一个界面为结算界面1
             if self.UI_valid == GameInfo.UI_PVE_Game_End_1 or self.UI_valid == GameInfo.UI_PVE_Game_End_2:
                 if WinInfo.Text_Char_XMGD_End_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_2):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面2：各类经验")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面2：各类经验")
                     return GameInfo.UI_PVE_Game_End_2
 
             # 是否为结算界面3：用户等级
             # OCR识别："等级"，且上一个界面为结算界面2
             if self.UI_valid == GameInfo.UI_PVE_Game_End_2 or self.UI_valid == GameInfo.UI_PVE_Game_End_3:
                 if WinInfo.Text_Char_XMGD_End_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_3):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面3：用户等级")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面3：用户等级")
                     return GameInfo.UI_PVE_Game_End_3
 
             # 是否为结算界面4-潜能等级
             # OCR识别："潜能等级"，且上一个界面为结算界面3
             if self.UI_valid == GameInfo.UI_PVE_Game_End_3 or self.UI_valid == GameInfo.UI_PVE_Game_End_4:
                 if WinInfo.Text_Char_XMGD_End_4 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_4):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面3：潜能等级")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面3：潜能等级")
                     return GameInfo.UI_PVE_Game_End_4
 
             # 是否为结算界面5-恭喜获得，不一定会出现。
             # OCR识别："返回"，且上一个界面为结算界面
             if GameInfo.UI_PVE_Game_End_1 <= self.UI_valid <= GameInfo.UI_PVE_Game_End_4:
                 if WinInfo.Text_Char_XMGD_End_5 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_5):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面5-恭喜获得")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面5-恭喜获得")
                     return GameInfo.UI_PVE_Game_End_5
 
             # 是否为结算界面6-恭喜获得，不一定会出现。
             # OCR识别："获得"，且上一个界面为结算界面
             if GameInfo.UI_PVE_Game_End_1 <= self.UI_valid <= GameInfo.UI_PVE_Game_End_5:
                 if WinInfo.Text_Char_XMGD_End_6 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_XMGD_End_6):
-                    logging.info(f"getCurUI：OCR识别到进入结算界面5-恭喜获得")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入结算界面5-恭喜获得")
                     return GameInfo.UI_PVE_Game_End_6
 
         # ————————————主界面识别————————————
         # ===无尽试炼===
-        if GAME_MODE_CUR == GAME_MODE_PVP_WJSL:
+        if self.gameMode == GAME_MODE_PVP_WJSL:
             # 是否为主界面-未点击“开始游戏”
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："开始游戏"
             if WinInfo.Text_Char_Main_Prepare in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVP_Main):
-                logging.info(f"getCurUI：OCR识别到进入主界面-未点击“开始游戏”")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-未点击“开始游戏”")
                 return GameInfo.UI_PVP_Main_Prepare
 
             # 是否为主界面-已点击“开始游戏”，正在匹配玩家
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："取消"
             if WinInfo.Text_Char_Main_Entering in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVP_Main):
-                logging.info(f"getCurUI：OCR识别到进入主界面-已点击“开始游戏”，正在匹配玩家")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-已点击“开始游戏”，正在匹配玩家")
                 return GameInfo.UI_PVP_Main_Entering
         # ===PVE征神，雪满弓刀/黄沙百炼/鸿溟之难/万象降临===
-        elif (GAME_MODE_CUR == GAME_MODE_PVE_XMGD
-              or GAME_MODE_CUR == GAME_MODE_PVE_HSBL
-              or GAME_MODE_CUR == GAME_MODE_PVE_HMZN
-              or GAME_MODE_CUR == GAME_MODE_PVE_WXJL):
+        elif (self.gameMode == GAME_MODE_PVE_XMGD
+              or self.gameMode == GAME_MODE_PVE_HSBL
+              or self.gameMode == GAME_MODE_PVE_HMZN
+              or self.gameMode == GAME_MODE_PVE_WXJL):
             # 【界面入口-1】主界面
             # OCR识别："开始征神"
             if ((GameInfo.UI_PVE_Game_End_1 <= self.UI_valid <= GameInfo.UI_PVE_Game_End_6)
                     or self.UI_valid == GameInfo.UI_Err_Other):
                 if WinInfo.Text_Char_PVE_Main in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main)\
                     or WinInfo.Text_Char_PVE_Main_2 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main):
-                    logging.info(f"getCurUI：OCR识别到进入主界面-未点击“开始征神”")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-未点击“开始征神”")
                     return GameInfo.UI_PVE_Main_Prepare
             # 前提：上一个界面是主界面
             if self.UI_valid == GameInfo.UI_PVE_Main_Prepare or self.UI_valid == GameInfo.UI_PVE_Main_Sure:
                 if WinInfo.Text_Char_PVE_Main_Sure in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main_Sure):
-                    logging.info(f"getCurUI：OCR识别到进入主界面-关闭疲劳的确认界面")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-关闭疲劳的确认界面")
                     return GameInfo.UI_PVE_Main_Sure
             # 前提：上一个界面是主界面
             if self.UI_valid == GameInfo.UI_PVE_Main_Prepare or self.UI_valid == GameInfo.UI_PVE_Main_Tire_Sure:
                 if WinInfo.Text_Char_PVE_Main_Tire_Sure in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Main_Tire_Sure):
-                    logging.info(f"getCurUI：OCR识别到进入主界面-疲劳值已达第5档")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-疲劳值已达第5档")
                     return GameInfo.UI_PVE_Main_Tire_Sure
 
         # 是否为主界面-消息弹窗
         OP.Sleep(ParamTime.slp_OCR)
         # OCR识别："取消"
         if WinInfo.Text_Char_Daily_Msg in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Daily_Msg):
-            logging.info(f"getCurUI：OCR识别到进入主界面-已点击“开始游戏”，正在匹配玩家")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入主界面-已点击“开始游戏”，正在匹配玩家")
             return GameInfo.UI_Daily_Msg
 
         # ————————————游戏开始：英雄选择界面识别————————————
         # ===无尽试炼===
-        if GAME_MODE_CUR == GAME_MODE_PVP_WJSL:
+        if self.gameMode == GAME_MODE_PVP_WJSL:
             # 是否为英雄选择界面？
             OP.Sleep(ParamTime.slp_OCR)
             # OCR识别："英雄选择"
             if WinInfo.Text_Char_Select_Hero in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Select_Hero):
-                logging.info(f"getCurUI：OCR识别到进入英雄选择界面")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入英雄选择界面")
                 return GameInfo.UI_PVP_Select_Hero
         # ===PVE征神，雪满弓刀/鸿溟之难/万象降临===
-        elif (GAME_MODE_CUR == GAME_MODE_PVE_XMGD
-              or GAME_MODE_CUR == GAME_MODE_PVE_HMZN
-              or GAME_MODE_CUR == GAME_MODE_PVE_WXJL):
+        elif (self.gameMode == GAME_MODE_PVE_XMGD
+              or self.gameMode == GAME_MODE_PVE_HMZN
+              or self.gameMode == GAME_MODE_PVE_WXJL):
             # 前一个界面是主界面/消息弹窗界面/不勾选疲劳确认界面/疲劳值已满确认界面
             if (self.UI_valid == GameInfo.UI_PVE_Main_Prepare
                     or self.UI_valid == GameInfo.UI_Daily_Msg
@@ -565,10 +716,10 @@ class Automation:
                     or self.UI_valid == GameInfo.UI_PVE_Select_Hero):
                 # OCR识别："英雄选择"
                 if WinInfo.Text_Char_PVE_Select_Hero in GetScrInfo.ocrAreaText(WinInfo.Area_Char_PVE_Select_Hero):
-                    logging.info(f"getCurUI：OCR识别到进入英雄选择界面")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入英雄选择界面")
                     return GameInfo.UI_PVE_Select_Hero
         # ===PVE征神，黄沙百炼===
-        elif GAME_MODE_CUR == GAME_MODE_PVE_HSBL:
+        elif self.gameMode == GAME_MODE_PVE_HSBL:
             # 前一个界面是主界面/消息弹窗界面/不勾选疲劳确认界面/疲劳值已满确认界面
             if (self.UI_valid == GameInfo.UI_PVE_Main_Prepare
                     or self.UI_valid == GameInfo.UI_Daily_Msg
@@ -578,27 +729,27 @@ class Automation:
                 # OCR识别："英雄选择"
                 if WinInfo.Text_Char_PVE_Select_Hero in GetScrInfo.ocrAreaText(
                         WinInfo.Area_Char_PVE_Select_Hero):
-                    logging.info(f"getCurUI：OCR识别到进入英雄选择界面")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入英雄选择界面")
                     return GameInfo.UI_PVE_Select_Hero
         # ————————————游戏开始：跳点选择界面识别————————————
         # # 是否为跳点选择界面【无尽试炼没有跳点选择】
         # OP.Sleep(ParamTime.slp_OCR)
         # OCR识别“英雄选择”
         # if WinInfo.Text_Char_Select_Hero in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Select_Hero):
-        #     logging.info(f"getCurUI：OCR识别到进入英雄选择界面")
+        #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入英雄选择界面")
         #     return GameInfo.UI_PVP_Select_Hero
 
         # ————————————登录界面识别————————————
         # OP.Sleep(ParamTime.slp_OCR)
         # OCR识别："公告"
         if WinInfo.Text_Char_Game_Start_1 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_Start_1):
-            logging.info(f"getCurUI：OCR识别到进入登录界面1：公告界面")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入登录界面1：公告界面")
             return GameInfo.UI_LogIn_Announcement
 
         # OP.Sleep(ParamTime.slp_OCR)
         # 找到图片："适龄提示16+"
         if GetScrInfo.findPic(WinInfo.Pic_Char_Game_Start_2, self.clientArea)[0] >= 0:
-            logging.info(f"getCurUI：OCR识别到进入登录界面2：适龄提示")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到进入登录界面2：适龄提示")
             return GameInfo.UI_LogIn_AgeRatingReminder
 
         # ————————————错误界面识别————————————
@@ -607,32 +758,32 @@ class Automation:
         # OCR识别："临时仓库中存在未领取的征神魂玉"
         if WinInfo.Text_Char_Main_Tip_PVEWarehouseFull in GetScrInfo.ocrAreaText(
                 WinInfo.Area_Char_Main_Tip_PVEWarehouseFull):
-            logging.info(f"getCurUI：OCR识别到主界面异常：临时仓库中存在未领取的征神魂玉")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到主界面异常：临时仓库中存在未领取的征神魂玉")
             return GameInfo.UI_Err_Main_PVEWarehouseFull
 
         # OCR识别："失去服务器链接"
         if WinInfo.Text_Char_Main_Err_LoseServerConnect in GetScrInfo.ocrAreaText(
                 WinInfo.Area_Char_Main_Err_LoseServerConnect):
-            logging.info(f"getCurUI：OCR识别到主界面错误：失去服务器连接")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到主界面错误：失去服务器连接")
             return GameInfo.UI_Err_Main_LoseServerConnect
 
         # 登录界面2：错误：提示，账号异常
         # OP.Sleep(ParamTime.slp_OCR)
         # OCR识别："账号异常"
         if WinInfo.Text_Char_Game_Start_2_Err in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_Start_2_Err):
-            logging.info(f"getCurUI：OCR识别到启动界面错误：账号异常")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到启动界面错误：账号异常")
             return GameInfo.UI_Err_LogIn_AccountError
 
         # 未录入信息的其他错误界面，弹窗名称是“提示”
         # OP.Sleep(ParamTime.slp_OCR)
         if WinInfo.Text_DialogBox_Title_Name_Prompt in GetScrInfo.ocrAreaText(WinInfo.Area_DialogBox_Title_Name):
             Prompt = GetScrInfo.ocrAreaText(WinInfo.Area_DialogBox_Err_Content)
-            logging.info(f"getCurUI：OCR识别到对话框弹窗，提示错误信息：{Prompt}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurUI：OCR识别到对话框弹窗，提示错误信息：{Prompt}")
             return GameInfo.UI_Err_Other
 
         # ————————————不符合上述任何一种界面：过渡界面————————————
         # 不符合任何一个特征，就认为进入了过渡界面。什么也不做，等待指定的时间：10秒
-        logging.error(f"getCurUI：进入过渡界面。")
+        G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"getCurUI：进入过渡界面。")
         return GameInfo.UI_Transition
 
     # ==========PVP无尽试炼===================================
@@ -641,9 +792,9 @@ class Automation:
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
         # 重复进行空手右键蓄力
-        logging.info("【进入游戏局内界面：】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入游戏局内界面：】")
         if self.getGameTimeLeft():
-            logging.info(f"本局游戏剩余时间：{self.gameTimeLeftStr}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"本局游戏剩余时间：{self.gameTimeLeftStr}")
         # 下面进行右键三连蓄力
         MouseOp.RightClickAreaRandom(WinInfo.Area_Random_left_move, self.ratio)
         OP.Sleep(300)
@@ -665,10 +816,10 @@ class Automation:
     def Handle_PVP_Main_Prepare(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【进入主界面：未点击“开始游戏”】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入主界面：未点击“开始游戏”】")
         if MouseOp.LeftClickAreaRandom(WinInfo.Area_Char_PVP_Main, self.ratio):
             # self.gameTime += 1 #这里获取游戏次数不对，因为可能存在匹配失败，多次点击“开始游戏”的情况
-            logging.info("主界面：点击“开始游戏”成功，正在匹配……")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "主界面：点击“开始游戏”成功，正在匹配……")
             # 点击开始后进入游戏，休眠等15秒进游戏：尝试匹配15秒
             OP.Sleep(ParamTime.slp_After_Start_Game)
 
@@ -676,19 +827,19 @@ class Automation:
     def Handle_PVP_Main_Entering(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【进入主界面：正在匹配】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入主界面：正在匹配】")
         if MouseOp.LeftClickAreaRandom(WinInfo.Area_Char_PVP_Main, self.ratio):
-            logging.info(f"主界面：等待{ParamTime.slp_After_Start_Game}"
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"主界面：等待{ParamTime.slp_After_Start_Game}"
                          f"秒后游戏未开始，匹配失败，取消匹配，等待下一次脚本点击“开始游戏”")
 
     # 进入游戏，选择英雄的界面
     def Handle_PVP_Select_Hero(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【进入英雄选择界面：】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入英雄选择界面：】")
         if MouseOp.LeftClickAreaRandom(WinInfo.Area_Select_Cur_Hero, self.ratio):
             self.curHero = GetScrInfo.ocrAreaText(WinInfo.Area_Hero_Name)
-            logging.info(f"已选择：{self.curHero}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"已选择：{self.curHero}")
 
     # 进入游戏，选择跳点的界面
     def Handle_PVP_Select_Point(self):
@@ -700,51 +851,51 @@ class Automation:
     def Handle_PVP_Game_End_WJSL_1(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【已跳过结算界面1】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【已跳过结算界面1】")
 
     # 无尽试炼-结算界面2：空格跳过
     def Handle_PVP_Game_End_WJSL_2(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
         # 后续：OCR识别获取击败数量
-        logging.info("【进入结算界面2】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入结算界面2】")
         if MouseOp.LeftClickAreaRandom(WinInfo.Area_Char_WJSL_End_2, self.ratio):
-            logging.info("跳过了结算界面2")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "跳过了结算界面2")
 
     # 无尽试炼-结算界面3：空格跳过
     def Handle_PVP_Game_End_WJSL_3(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
         # 后续：OCR识别获取增加的经验
-        logging.info("【进入结算界面3】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入结算界面3】")
         if MouseOp.LeftClickAreaRandom(WinInfo.Area_Skip_WJSL_End_3, self.ratio):
-            logging.info("跳过了结算界面3")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "跳过了结算界面3")
 
     # 无尽试炼-结算界面4：OCR获取通行证经验值，空格跳过
     def Handle_PVP_Game_End_WJSL_4(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        self.gameCnt += 1
+        # self.gameCnt += 1
         # 后续：OCR识别获取增加的经验
-        logging.info("【进入结算界面4】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入结算界面4】")
         # 获取经验值EXP
         curEXP = self.getEXP_WJSJ()
         if curEXP > 0:
             self.EXP += curEXP
-            logging.info(f"本局游戏经验值：{curEXP}(若为0则表示OCR识别经验值失败。)")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"本局游戏经验值：{curEXP}(若为0则表示OCR识别经验值失败。)")
         else:
-            logging.warning(f"OCR识别经验值失败。")
-        logging.info(f"本次脚本已获取游戏经验值：{self.EXP}")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,f"OCR识别经验值失败。")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"本次脚本已获取游戏经验值：{self.EXP}")
         if KeyOp.PressKey(OPKeyCode.Space):
-            logging.info("使用空格跳过结算界面4")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "使用空格跳过结算界面4")
 
     # 无尽试炼-结算界面5：空格跳过
     def Handle_PVP_Game_End_WJSL_5(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【进入结算界面5】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入结算界面5】")
         if KeyOp.PressKey(OPKeyCode.Space):
-            logging.info("使用空格跳过结算界面5")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "使用空格跳过结算界面5")
 
     # ==========PVE黄沙百炼===================================
     def Handle_PVE_HSBL_Game_In_1_ESC(self):
@@ -752,7 +903,7 @@ class Automation:
         self.UserPause()
         # 可以ESC跳过的界面
         KeyOp.PressKey(OPKeyCode.ESC)
-        if PC_NAME == "MyServer":
+        if self.pcName == "MyServer":
             OP.Sleep(3000)  #由于MyServer处理器和显卡性能极差，故需要等待3秒，让地图加载完毕
         else:
             OP.Sleep(1600)  # 休眠1秒，等待游戏加载出界面。否则会识别为过渡界面。
@@ -774,7 +925,7 @@ class Automation:
         # 鼠标DPI：2000，
         # Windows11系统设置中鼠标速度：10， 控制面板的指针选项的“选择指针移动速度”为第6格的位置，并且关闭“增强指针精确度”
         # ——————————————————————————————————————————————————————————————————————————————————————————————
-        if PC_NAME == "MyServer":
+        if self.pcName == "MyServer":
             OP.Sleep(3000)  #由于MyServer处理器和显卡性能极差，故需要等待3秒，让地图加载完毕
         # ————————1、前进到P2，调整视角———————————————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
@@ -782,28 +933,28 @@ class Automation:
         OP.Sleep(300)
         MouseOp.MoveR(round(315 * mouse_ratio), -round(110 * mouse_ratio))  # 视角往右、往上移动
         OP.Sleep(300)
-        if PC_NAME == "MyServer":
+        if self.pcName == "MyServer":
             OP.Sleep(200)   # 电脑性能差，多休眠一段时间
         # ————————2、钩锁到P3————————————————————————————————————————————————————————————————————————————
         # 到达P2，视角已调整，按Q+鼠标左键
         KeyOp.PressKey(OPKeyCode.Q)
         OP.Sleep(300)
         MouseOp.LeftClickNow()
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             OP.Sleep(3000)
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             OP.Sleep(3000)
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             OP.Sleep(4000)
         # ————————3、前进到P4，调整视角———————————————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         KeyOp.HoldTwoKey(OPKeyCode.W, 1400, OPKeyCode.Shift, 1000)  # 在平台上移动
         # MouseOp.MoveR(-round(106 * mouse_ratio), round(85 * mouse_ratio))  # 视角往左下角移动
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             MouseOp.MoveR(-round(103 * mouse_ratio), -round(32 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             MouseOp.MoveR(-round(110 * mouse_ratio), -round(25 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             MouseOp.MoveR(-round(110 * mouse_ratio), -round(25 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
         OP.Sleep(300)
         # ————————4、钩锁P5飞袭到P6————————————————————————————————————————————————————————————————————————
@@ -813,29 +964,32 @@ class Automation:
         OP.Sleep(200)
         MouseOp.LeftClickNow()
         OP.Sleep(1600)  # 休眠1秒，在接左键飞袭
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             OP.Sleep(2000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             MouseOp.LeftClickNow()
-            OP.Sleep(2000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
-        elif PC_NAME != "MyServer":   # MyServer性能太差，钩锁会导致卡顿。故不使用钩锁。只落到那个空中平台上，然后奔跑到P7
+            OP.Sleep(2700)  # 休眠，等待钩锁攻击结束，然后才能奔跑    #微调
+        elif self.pcName != "MyServer":   # MyServer性能太差，钩锁会导致卡顿。故不使用钩锁。只落到那个空中平台上，然后奔跑到P7
             OP.Sleep(3000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
         # KeyOp.PressKey(OPKeyCode.C) #有可能挂在钩锁点，所以需要C下坠。：后来发现，如果挂上去了，就算下坠下来，方向也变了。所以没必要。
         # OP.Sleep(1500)
         # ————————5、前进到P7，调整视角，火炮攻击2次———————————————————————————————————————————————————
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             KeyOp.HoldTwoKey(OPKeyCode.W, 3650, OPKeyCode.Shift, 1000)  # 奔跑到P7，由于钩锁点变更，需要奔跑更远
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             KeyOp.HoldTwoKey(OPKeyCode.W, 2500, OPKeyCode.Shift, 1000)  # 奔跑到P7
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             KeyOp.HoldTwoKey(OPKeyCode.W, 3650, OPKeyCode.Shift, 1000)  # 奔跑到P7，由于空中平台上，故需要多跑一段时间
         KeyOp.PressKey(OPKeyCode.Num2)  # 数字键2切换火炮
         OP.Sleep(300)
         KeyOp.PressKey(OPKeyCode.Num2)  # 数字键2切换火炮-多切换一次，防止切换失败。
         OP.Sleep(800)
         # MouseOp.MoveR(-round(415 * mouse_ratio), round(90 * mouse_ratio))  # 视角往左下移动，瞄准野怪
-        MouseOp.MoveR(-round(415 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
+        if self.pcName == "Desktop":    #微调
+            MouseOp.MoveR(-round(370 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
+        else:
+            MouseOp.MoveR(-round(415 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
         OP.Sleep(500)
         # for fireCnt in range(1, 3, 1):  # 火炮攻击2次。其实无需火炮，F技能火球就能击杀小怪。但是稳妥起见，火炮攻击。
         #     MouseOp.LeftClickNow()
@@ -845,24 +999,27 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球。防止F失败，多F一次
         OP.Sleep(1200)
         # MouseOp.MoveR(-160, 0)  # 视角往左移动
-        MouseOp.MoveR(-round(150 * mouse_ratio), 0)  # 视角往左移动
+        if self.pcName == "Desktop":    #微调
+            MouseOp.MoveR(-round(195 * mouse_ratio), 0)  # 上一处转的角度小，这里补回来
+        else:
+            MouseOp.MoveR(-round(150 * mouse_ratio), 0)  # 视角往左移动
         OP.Sleep(800)
         # ————————6、前进到P8，调整视角，前进到P9————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             # KeyOp.HoldTwoKey(OPKeyCode.W, 1150, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
             KeyOp.HoldTwoKey(OPKeyCode.W, 2200, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             KeyOp.HoldTwoKey(OPKeyCode.W, 1230, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             KeyOp.HoldTwoKey(OPKeyCode.W, 1182, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
         # OP.Sleep(2600)  # 这里到达P8是个下坡，可能会有滑落动作，等2秒
         OP.Sleep(600)  # P8现在是挂壁状态
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             MouseOp.MoveR(-round(190 * mouse_ratio * 1.12), -round(55 * mouse_ratio * 1.1))  # 视角往左上移动
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             MouseOp.MoveR(-190, -55)  # 视角往左上移动
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             MouseOp.MoveR(-round(193 * mouse_ratio), -round(55 * mouse_ratio))  # 视角往左上移动
         OP.Sleep(500)
         # 到达P8后，如果继续往前，可能会出现卡脚的情况，必须先往左转走两步，再复原视角，解决卡脚问题。
@@ -873,29 +1030,29 @@ class Automation:
         OP.Sleep(300)
         MouseOp.MoveR(580, 0)  # 视角往右移动
         OP.Sleep(300)
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             KeyOp.HoldTwoKey(OPKeyCode.W, 400, OPKeyCode.Shift, 1000)  # 到达P9
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             KeyOp.HoldTwoKey(OPKeyCode.W, 680, OPKeyCode.Shift, 1000)  # 到达P9
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             KeyOp.HoldTwoKey(OPKeyCode.W, 725, OPKeyCode.Shift, 1000)  # 到达P9
         OP.Sleep(800)
         # ————————7、在P9，调整视角，火炮远程攻击————————————————————————————————————————————————————————
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             MouseOp.MoveR(round(260 * mouse_ratio * 1.02), -round(20 * mouse_ratio))  # 视角往右上移动
-        elif PC_NAME == "Desktop" or PC_NAME == "MyServer":
+        elif self.pcName == "Desktop" or self.pcName == "MyServer":
             MouseOp.MoveR(round(260 * mouse_ratio), -round(20 * mouse_ratio))  # 视角往右上移动
         OP.Sleep(1500)
         for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1500, 1800))
+            OP.Sleep(random.randint(1900, 2000))
         OP.Sleep(1000)
         # ————————7、继续待在P9原地不动，调整视角，火炮远程攻击———————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         MouseOp.MoveR(-round(106 * mouse_ratio), round(60 * mouse_ratio))  # 视角左下移动
         OP.Sleep(800)
-        if PC_NAME == "MyServer":
+        if self.pcName == "MyServer":
             OP.Sleep(1000)
         # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
         # OP.Sleep(600)
@@ -903,32 +1060,33 @@ class Automation:
         # OP.Sleep(2000)
         for fireCnt in range(1, 8, 1):  # 火炮攻击7次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1500, 1800))
-        if PC_NAME == "MyServer":
+            OP.Sleep(random.randint(1900, 2000))
+        if self.pcName == "MyServer":
             OP.Sleep(1000)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
         OP.Sleep(600)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
         OP.Sleep(2000)
-        for fireCnt in range(1, 11, 1):  # 火炮攻击10次(可能有天赐武备匣效果)
+        for fireCnt in range(1, 7, 1):  # 火炮攻击7次(可能有天赐武备匣效果)    # 20250629：从11次改为7次
             MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1750, 1900))
-            # print(f"fireCnt={fireCnt}")
-        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
-        OP.Sleep(600)
-        KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
-        OP.Sleep(2000)
-        for fireCnt in range(1, 5, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
-            MouseOp.LeftClickNow()
-            OP.Sleep(random.randint(1750, 1900))
+            OP.Sleep(random.randint(1900, 2000))
+            # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"fireCnt={fireCnt}")
+        # 以下内容在20250629注释，因为一般不需要开这么多炮
+        # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
+        # OP.Sleep(600)
+        # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
+        # OP.Sleep(2000)
+        # for fireCnt in range(1, 3, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
+        #     MouseOp.LeftClickNow()
+        #     OP.Sleep(random.randint(1750, 1900))
         # ————————9、调整视角，前往P10，开两炮，再调整视角——————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         OP.Sleep(1500)
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
         OP.Sleep(600)
         KeyOp.HoldTwoKey(OPKeyCode.W, 1700, OPKeyCode.Shift, 1000)  # 前进到P10
@@ -940,31 +1098,39 @@ class Automation:
         # OP.Sleep(2000)
         MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
-        if PC_NAME == "ThinkBook16P":
+        if self.pcName == "ThinkBook16P":
             MouseOp.MoveR(round(298 * mouse_ratio), 0)  # 视角平行往右移动60度
-        elif PC_NAME == "Desktop":
+        elif self.pcName == "Desktop":
             MouseOp.MoveR(round(295 * mouse_ratio), 0)  # 视角平行往右移动60度
-        elif PC_NAME == "MyServer":
+        elif self.pcName == "MyServer":
             MouseOp.MoveR(round(305 * mouse_ratio), 0)  # 视角平行往右移动60度
         OP.Sleep(1000 )
         # MouseOp.LeftClickNow()  # 火炮攻击
         # OP.Sleep(1650)
         MouseOp.LeftClickNow()  # 火炮攻击一次
         OP.Sleep(2000)
-        MouseOp.MoveR(150, 0)  # 视角平行往右移动
-        OP.Sleep(1000)
-        MouseOp.LeftClickNow()  # 火炮攻击一次
-        OP.Sleep(2300)
-        MouseOp.MoveR(-150, 0)  # 视角平行往左移动
-        OP.Sleep(1000)
+        if self.pcName == "Desktop":    #微调
+            MouseOp.MoveR(127, 0)  # 视角平行往右移动
+            OP.Sleep(1000)
+            MouseOp.LeftClickNow()  # 火炮攻击一次
+            OP.Sleep(2300)
+            MouseOp.MoveR(-127, 0)  # 视角平行往左移动
+            OP.Sleep(1000)
+        else:
+            MouseOp.MoveR(150, 0)  # 视角平行往右移动
+            OP.Sleep(1000)
+            MouseOp.LeftClickNow()  # 火炮攻击一次
+            OP.Sleep(2300)
+            MouseOp.MoveR(-150, 0)  # 视角平行往左移动
+            OP.Sleep(1000)
 
         # ————————10、前往P12，并E开箱————————————————————————————————————————————————————————————————————
         Tools.RunAndE(1200, 120)    # 一边跑，一边E
-        # if PC_NAME == "ThinkBook16P":
+        # if self.pcName == "ThinkBook16P":
         #     KeyOp.HoldTwoKey(OPKeyCode.W, 950, OPKeyCode.Shift, 1000)
-        # elif PC_NAME == "Desktop":
+        # elif self.pcName == "Desktop":
         #     KeyOp.HoldTwoKey(OPKeyCode.W, 830, OPKeyCode.Shift, 1000)
-        # elif PC_NAME == "MyServer":
+        # elif self.pcName == "MyServer":
         #     KeyOp.HoldTwoKey(OPKeyCode.W, 1140, OPKeyCode.Shift, 1000)
         OP.Sleep(100)
         KeyOp.PressKey(OPKeyCode.E) # 多E一次
@@ -1089,16 +1255,17 @@ class Automation:
         # 循环，直到识别到通关成功，或者到达设定时间仍未识别到通关成功，强行退出。
         while True:
             cycCnt += 1     #更新循环次数
-            print(f"循环计数：{cycCnt}")
-            self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"循环计数：{cycCnt}")
+            if not self.UserPause():  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
+                return False  # 用户主动结束，就退出循环
             # ————————计算已用时间，判断是否超时————————————————————————————————————————————————————————————————————
             self.gameTimeUsed = (datetime.now() - self.gameTimeStart).total_seconds()   #计算目前已用时间，单位：秒
-            print(f"已用{self.gameTimeUsed}秒")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"已用{self.gameTimeUsed}秒")
             if self.gameTimeUsed >= ParamTime.max_InGame_Time_PVE_HMZN:
-                logging.info(
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                     f"本局游戏已超时仍未通关，强制结束并返回大厅，本局消耗时间：{self.gameTimeUsed}秒。")
                 self.Return_To_Home()  # 退出本局游戏，返回大厅
-                break
+                return False
             # ————————从出生点/复活点前往战斗地点————————————————————————————————————————————————————————————————————
             if isBegin:
                 MouseOp.MoveR(60, 0)  # 视角平行往右移动一些
@@ -1108,7 +1275,7 @@ class Automation:
                 while True:
                     # 如果OCR识别到“跳过”，就ESC跳过
                     if WinInfo.Text_Char_Game_in_PVE_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_3):
-                        logging.info(
+                        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                             f"getCurUI：OCR识别到进入游戏内界面3-过渡动画，特征字：{WinInfo.Text_Char_Game_in_PVE_3}")
                         KeyOp.PressKey(OPKeyCode.ESC)
                         isBegin = False  # 只有成功识别到ESC跳过界面才能置isBegin为False，跳过过渡的可跳过界面
@@ -1124,15 +1291,15 @@ class Automation:
                 OP.Sleep(4500)
                 KeyOp.PressKey(OPKeyCode.Tilde)  # 锁定视角：万象-魈
                 isLocked = True
-                print(f"首次锁定视角成功：万象-魈")
-                logging.info(f"锁定视角成功，战斗开始。")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"首次锁定视角成功：万象-魈")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"锁定视角成功，战斗开始。")
 
             # ————————获取BOSS名称、锁定视角、判断是否通关————————————————————————————————————————————————————————————————————
             if cycCnt % 2 == 0:
                 timeBegin1 = datetime.now()
                 tmpBossName = self.getCurBossName(WinInfo.Area_Char_Game_In_PVE_HMZN_2_BossName)
                 usedTime1 = (datetime.now() - timeBegin1).total_seconds()
-                print(f"ocrAreaTextQuick用时：{usedTime1}，识别结果：{tmpBossName}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"ocrAreaTextQuick用时：{usedTime1}，识别结果：{tmpBossName}")
                 if tmpBossName != "NoResult": # 获取到有效结果
                     if "本体" in tmpBossName:
                         curBossName = "本体"
@@ -1141,20 +1308,20 @@ class Automation:
                     else:
                         # 有效结果中没有BOSS名称，判断是否通关成功
                         if WinInfo.Text_Char_Game_in_PVE_5 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_5):
-                            logging.info(
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                                 f"战斗结束，OCR识别到特征字：{WinInfo.Text_Char_Game_in_PVE_5}，本局消耗时间：{self.gameTimeUsed}秒。")
                             self.Return_To_Home()  # 退出本局游戏，返回大厅
-                            print(f"通关成功。")
-                            break
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"通关成功。")
+                            return True
                         else:
-                            print(f"当前未通关成功，继续战斗。")
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前未通关成功，继续战斗。")
             if curBossName != bossName:   # 进入BOSS下一阶段
                 MouseOp.MoveR(0, -250)  # 抬高一些视角，否则后面无法锁定
                 isLocked = False
                 bossName= curBossName
-                print(f"【BOSS切换】上一轮BOSS：{bossName}，当前BOSS：{curBossName}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"【BOSS切换】上一轮BOSS：{bossName}，当前BOSS：{curBossName}")
             else:
-                print(f"BOSS未切换，当前BOSS：{bossName}")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"BOSS未切换，当前BOSS：{bossName}")
 
             if not isLocked:
                 if bossName == "本体":
@@ -1164,7 +1331,7 @@ class Automation:
                 OP.Sleep(500)
                 KeyOp.PressKey(OPKeyCode.Tilde)  # 锁定视角
                 isLocked = True
-                print(f"BOSS更新，锁定视角成功。")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"BOSS更新，锁定视角成功。")
             # ————————每次循环：左键攻击————————————————————————————————————————————————————————————————————
             self.ThreeAttackLeft()
             if cycCnt % 2 == 0:
@@ -1176,15 +1343,14 @@ class Automation:
                 OP.Sleep(random.randint(200, 250))
                 KeyOp.PressKey(OPKeyCode.V)
 
-    @staticmethod
-    def getCurBossName(area: list[4])->str:
+    def getCurBossName(self, area: list[4])->str:
         name1 = GetScrInfo.ocrAreaTextQuick1(WinInfo.Area_Char_Game_In_PVE_HMZN_2_BossName)
         name2 = GetScrInfo.ocrAreaTextQuick2(WinInfo.Area_Char_Game_In_PVE_HMZN_2_BossName)
         if name1 == name2:
-            print(f"getCurBossName连续两次相同：{name1}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getCurBossName连续两次相同：{name1}")
             return name1    # 正常来说，有三种结果：万象，本体，空字符串
         else:
-            print(f"getCurBossName连续两次不同：{name1}、{name2}")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning, f"getCurBossName连续两次不同：{name1}、{name2}")
             return "NoResult"
 
     # 左键三连击
@@ -1202,7 +1368,7 @@ class Automation:
         self.Battle_Common(GAME_MODE_PVE_WXJL)
 
     # 通用战斗方式，适用于只需锁定一次视角
-    def Battle_Common(self, GameMode:str):
+    def Battle_Common(self, GameMode:str) -> bool:
         #————————————————————————————————————————————————————
         # 不同模式有不同的BOSS
         curBossName = ""
@@ -1239,74 +1405,98 @@ class Automation:
         bossName = curBossName  # 当前正在打的BOSS名称，一般都是“万象·XXX”，例如万象狱炎、魈、兽、苍帝等等
         # 循环，直到识别到通关成功，或者到达设定时间仍未识别到通关成功，强行退出。
         while True:
-            cycCnt += 1  # 更新循环次数
-            print(f"循环计数：{cycCnt}")
-            self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-            # ————————计算已用时间，判断是否超时————————————————————————————————————————————————————————————————————
-            self.gameTimeUsed = (datetime.now() - self.gameTimeStart).total_seconds()  # 计算目前已用时间，单位：秒
-            print(f"已用{self.gameTimeUsed}秒")
-            if self.gameTimeUsed >= maxTime:  # 超出最大时间，强行返回大厅
-                logging.info(
-                    f"本局游戏已超时仍未通关，强制结束并返回大厅，本局消耗时间：{self.gameTimeUsed}秒。")
-                self.Return_To_Home()  # 退出本局游戏，返回大厅
-                break
-            # ————————从出生点/复活点前往战斗地点————————————————————————————————————————————————————————————————————
-            if isBegin:
-                MouseOp.MoveR(0, 0)  # 视角平行往右移动一些
-                OP.Sleep(200)
-                Tools.RunAndE(runTime, 330)  # 一边跑，一边E
-                OP.Sleep(5000)
-                while True:
-                    # 如果OCR识别到“跳过”，就ESC跳过
-                    if WinInfo.Text_Char_Game_in_PVE_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_3):
-                        logging.info(
-                            f"getCurUI：OCR识别到进入游戏内界面3-过渡动画，特征字：{WinInfo.Text_Char_Game_in_PVE_3}")
-                        KeyOp.PressKey(OPKeyCode.ESC)
-                        isBegin = False  # 只有成功识别到ESC跳过界面才能置isBegin为False，跳过过渡的可跳过界面
-                        break
-                OP.Sleep(2500)
-                # 等待BOSS出现，然后进行视角锁定
-                while True:
-                    tmpBossName = self.getCurBossName(curBossArea)
+            try:
+                cycCnt += 1  # 更新循环次数
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"循环计数：{cycCnt}")
+                if not self.UserPause():  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
+                    return False    # 用户主动结束，就退出循环
+                # ————————计算已用时间，判断是否超时————————————————————————————————————————————————————————————————————
+                self.gameTimeUsed = (datetime.now() - self.gameTimeStart).total_seconds()  # 计算目前已用时间，单位：秒
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"已用{self.gameTimeUsed}秒")
+                if self.gameTimeUsed >= maxTime:  # 超出最大时间，强行返回大厅
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
+                        f"本局游戏已超时仍未通关，强制结束并返回大厅，本局消耗时间：{self.gameTimeUsed}秒。")
+                    self.Return_To_Home()  # 退出本局游戏，返回大厅
+                    return False
+                # ————————从出生点/复活点前往战斗地点————————————————————————————————————————————————————————————————————
+                if isBegin:
+                    MouseOp.MoveR(0, 0)  # 视角平行往右移动一些
+                    OP.Sleep(200)
+                    Tools.RunAndE(runTime, 330)  # 一边跑，一边E
+                    OP.Sleep(5000)
+                    while True:
+                        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"尝试ESC")
+                        # 如果OCR识别到“跳过”，就ESC跳过
+                        if WinInfo.Text_Char_Game_in_PVE_3 in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_in_PVE_3):
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
+                                f"getCurUI：OCR识别到进入游戏内界面3-过渡动画，特征字：{WinInfo.Text_Char_Game_in_PVE_3}")
+                            KeyOp.PressKey(OPKeyCode.ESC)
+                            isBegin = False  # 只有成功识别到ESC跳过界面才能置isBegin为False，跳过过渡的可跳过界面
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"ESC成功")
+                            break
+                    OP.Sleep(2500)
+                    # 等待BOSS出现，然后进行视角锁定
+                    while True:
+                        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"尝试锁定视角")
+                        tmpBossName = self.getCurBossName(curBossArea)
+                        if curBossName in tmpBossName:
+                            KeyOp.PressKey(OPKeyCode.Tilde)  # 锁定视角
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"锁定视角成功，战斗开始。")
+                            break
+
+                # ————————判断是否通关————————————————————————————————————————————————————————————————————
+                # if cycCnt % 2 == 0:
+                timeBegin1 = datetime.now()
+                tmpBossName = self.getCurBossName(curBossArea)
+                usedTime1 = (datetime.now() - timeBegin1).total_seconds()
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"ocrAreaTextQuick用时：{usedTime1}，识别结果：{tmpBossName}")
+                if tmpBossName != "NoResult":  # 获取到有效结果
                     if curBossName in tmpBossName:
-                        KeyOp.PressKey(OPKeyCode.Tilde)  # 锁定视角
-                        logging.info(f"锁定视角成功，战斗开始。")
-                        print(f"锁定视角成功，战斗开始。")
-                        break
-
-            # ————————判断是否通关————————————————————————————————————————————————————————————————————
-            # if cycCnt % 2 == 0:
-            timeBegin1 = datetime.now()
-            tmpBossName = self.getCurBossName(curBossArea)
-            usedTime1 = (datetime.now() - timeBegin1).total_seconds()
-            print(f"ocrAreaTextQuick用时：{usedTime1}，识别结果：{tmpBossName}")
-            if tmpBossName != "NoResult":  # 获取到有效结果
-                if curBossName in tmpBossName:
-                    print(f"当前BOSS：{curBossName}")
-                else:
-                    # 有效结果中没有BOSS名称，判断是否通关成功
-                    if WinInfo.Text_Char_Game_in_PVE_5 in GetScrInfo.ocrAreaText(
-                            WinInfo.Area_Char_Game_in_PVE_5):
-                        logging.info(
-                            f"战斗结束，OCR识别到特征字：{WinInfo.Text_Char_Game_in_PVE_5}，本局消耗时间：{self.gameTimeUsed}秒。")
-                        print(f"通关成功。")
-                        self.Return_To_Home()  # 退出本局游戏，返回大厅
-                        break
+                        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前BOSS：{curBossName}")
                     else:
-                        print(f"当前未通关成功，继续战斗。")
+                        # 有效结果中没有BOSS名称，判断是否通关成功
+                        if WinInfo.Text_Char_Game_in_PVE_5 in GetScrInfo.ocrAreaText(
+                                WinInfo.Area_Char_Game_in_PVE_5):
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
+                                f"战斗结束，OCR识别到特征字：{WinInfo.Text_Char_Game_in_PVE_5}，本局消耗时间：{self.gameTimeUsed}秒。")
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"通关成功。")
+                            self.Return_To_Home()  # 退出本局游戏，返回大厅
+                            return True
+                        else:
+                            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前未通关成功，继续战斗。")
 
-            # ————————每次循环：左键三连击————————————————————————————————————————————————————————————————————
-            self.ThreeAttackLeft()
-            if cycCnt % 2 == 0:
-                # ————————点击F键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(100, 120))
-                KeyOp.PressKey(OPKeyCode.F)
-                KeyOp.PressKey(OPKeyCode.F)
-            elif cycCnt % 2 == 1:
-                # ————————点击V键使用技能————————————————————————————————————————————————————————————————————
-                OP.Sleep(random.randint(100, 120))
-                KeyOp.PressKey(OPKeyCode.V)
-                KeyOp.PressKey(OPKeyCode.V)
+                # ————————每次循环：左键三连击————————————————————————————————————————————————————————————————————
+                self.ThreeAttackLeft()
+                if cycCnt % 2 == 0:
+                    # ————————点击F键使用技能————————————————————————————————————————————————————————————————————
+                    OP.Sleep(random.randint(100, 120))
+                    KeyOp.PressKey(OPKeyCode.F)
+                    KeyOp.PressKey(OPKeyCode.F)
+                elif cycCnt % 2 == 1:
+                    # ————————点击V键使用技能————————————————————————————————————————————————————————————————————
+                    OP.Sleep(random.randint(100, 120))
+                    KeyOp.PressKey(OPKeyCode.V)
+                    KeyOp.PressKey(OPKeyCode.V)
+            except Exception as e:
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"异常类型: {type(e).__name__}")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"异常信息: {str(e)}")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"异常参数: {e.args}")
+
+                # 获取详细的错误追踪
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "\n详细错误追踪:")
+                traceback.print_exc()
+
+                # 获取异常的详细信息
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"\n系统异常信息:")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"异常类型: {exc_type}")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"异常值: {exc_value}")
+
+                # 格式化异常追踪信息
+                tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "格式化的异常追踪:")
+                for line in tb_lines:
+                    G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, line.strip())
 
     def Return_To_Home(self):
         #————————ESC退出、点击“返回大厅”、空格确定————————————————————————————————————————————————————————————————————
@@ -1354,12 +1544,12 @@ class Automation:
     #     if self.pcsCnt % ParamCnt.pcsOfF == 0:
     #         OP.Sleep(600)  # 这个时间可以调整：右键攻击到F的延时
     #         if KeyOp.PressKey(OPKeyCode.F):
-    #             logging.info(f"尝试释放F技能")
+    #             G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"尝试释放F技能")
     #     # 每隔pcsOfV个周期放一次V
     #     if self.pcsCnt % ParamCnt.pcsOfV == 0:
     #         OP.Sleep(500)  # 这个时间可以调整：F到V的延时
     #         if KeyOp.PressKey(OPKeyCode.V):
-    #             logging.info(f"尝试释放V技能")
+    #             G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"尝试释放V技能")
 
     # def Handle_PVE_Game_In_5_Succeed(self):
     #     # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
@@ -1369,10 +1559,10 @@ class Automation:
     #     OP.Sleep(1000)
     #     # 如果OCR识别到“返回大厅”
     #     if WinInfo.Text_PVE_Return_Home_From_Game in GetScrInfo.ocrAreaText(WinInfo.Area_PVE_Return_Home_From_Game):
-    #         logging.info(f"成功输入ESC，识别到“{WinInfo.Text_PVE_Return_Home_From_Game}”")
+    #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"成功输入ESC，识别到“{WinInfo.Text_PVE_Return_Home_From_Game}”")
     #         # 点击“返回大厅”这个区域
     #         MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Return_Home_From_Game, self.ratio)
-    #         logging.info(f"成功点击“{WinInfo.Text_PVE_Return_Home_From_Game}”")
+    #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"成功点击“{WinInfo.Text_PVE_Return_Home_From_Game}”")
     #         OP.Sleep(1500)
     #         KeyOp.PressKey(OPKeyCode.Space)  # 空格确定
 
@@ -1381,34 +1571,33 @@ class Automation:
         self.UserPause()
         self.battleCnt = 0
         self.gameCnt += 1
-        logging.info(f"当前游戏局数：{self.gameCnt}")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前游戏局数：{self.gameCnt}")
 
         curFatigue = self.getCurFatigue()
         usedFatigue = curFatigue - self.fatigue
         if ParamCnt.FatigueMin <= usedFatigue <= ParamCnt.FatigueMax:   # 一局游戏消耗的疲劳值应当在合理范围内，否则不做记录
-            logging.info(f"当前疲劳值：{curFatigue}，上一局游戏消耗疲劳：{curFatigue - self.fatigue}")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值：{curFatigue}，上一局游戏消耗疲劳：{curFatigue - self.fatigue}")
             if usedFatigue == 0:
-                logging.error(f"上局游戏未能消耗疲劳值！")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"上局游戏未能消耗疲劳值！")
         else:
-            logging.info(f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
         self.fatigue = curFatigue
 
         # 如果达到限定的疲劳值，则退出脚本
         if 0 < MAX_FATIGUE <= self.fatigue:
-            print(f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
-            logging.info(f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值{self.fatigue}，已经达到设定的疲劳值{MAX_FATIGUE}，脚本退出。")
             exit(2)
 
         # 如果游戏局数每达到x盘，就休眠120秒
         if self.gameCnt % 100 == 0:
-            logging.info(f"游戏局数达到100盘，休眠120秒")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"游戏局数达到100盘，休眠120秒")
             OP.Sleep(120000)
         MouseOp.LeftClickAreaRandom(WinInfo.Area_Char_PVE_Main, self.ratio)
         OP.Sleep(12000)  # 点击“开始征神”后，休眠数秒。防止一直点击。
 
     # 获取疲劳值
-    @staticmethod
-    def getCurFatigue()->int:
+    def getCurFatigue(self)->int:
         fatigueStr = GetScrInfo.ocrAreaText(WinInfo.Area_PVE_Fatigue_All)   #当前疲劳值，格式：203/2400
         fatigueStr_int = 0  #默认0
         # 判断字符串中是否包含 "/"
@@ -1446,11 +1635,11 @@ class Automation:
     def Handle_PVE_Select_Hero(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        if (GAME_MODE_CUR == GAME_MODE_PVE_XMGD
-                or GAME_MODE_CUR == GAME_MODE_PVE_HMZN
-                or GAME_MODE_CUR == GAME_MODE_PVE_WXJL):
+        if (self.gameMode == GAME_MODE_PVE_XMGD
+                or self.gameMode == GAME_MODE_PVE_HMZN
+                or self.gameMode == GAME_MODE_PVE_WXJL):
             MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Hero_NingHy, self.ratio)  # PVE-雪满弓刀只推荐宁红夜，F技能自动索敌
-        elif GAME_MODE_CUR == GAME_MODE_PVE_HSBL:
+        elif self.gameMode == GAME_MODE_PVE_HSBL:
             MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Hero_JiCH, self.ratio)  # PVE-黄沙百炼推荐季沧海/岳山，使用火炮
         OP.Sleep(1000)  # 休眠1秒，再点“确定”
         MouseOp.LeftClickAreaRandom(WinInfo.Area_PVE_Select_Cur_Hero, self.ratio)
@@ -1469,7 +1658,7 @@ class Automation:
         # try:
         #     curEXP = int(EXPstr_int)
         # except ValueError:
-        #     print(f"Error: '{EXPstr_int}' is not a valid integer.")
+        #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"Error: '{EXPstr_int}' is not a valid integer.")
         #     curEXP = ParamCnt.EXE_DEFAULT_WJSL
         # self.EXP += curEXP
         KeyOp.PressKey(OPKeyCode.Space)
@@ -1511,16 +1700,16 @@ class Automation:
     def Handle_Daily_Msg(self):
         # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         self.UserPause()
-        logging.info("【进入主界面：发现每日消息弹窗】")
+        G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "【进入主界面：发现每日消息弹窗】")
         if MouseOp.LeftClickPoint(WinInfo.Point_Daily_Msg_Skip, self.ratio):
             if KeyOp.PressKey(OPKeyCode.ESC):
-                logging.info("已跳过每日消息弹窗。")
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "已跳过每日消息弹窗。")
 
     # 如果在游戏局外，按下了ESC，会弹出这个界面。直接点击返回游戏即可。
     def Handle_ESC_Selection(self):
         # 移动到“返回游戏”，然后点击
         MouseOp.LeftClickPoint(WinInfo.Point_ESC_Select_OutGame_ReturnGame, self.ratio)
-        logging.warning("误触ESC的界面：尝试跳出错误界面，点击一次“返回游戏”")
+        G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,"误触ESC的界面：尝试跳出错误界面，点击一次“返回游戏”")
 
     # 过渡界面
     @staticmethod
@@ -1531,18 +1720,17 @@ class Automation:
     # @staticmethod
     # def Handle_Skip_Space():
     #     if KeyOp.PressKey(OPKeyCode.Space):
-    #         logging.warning("可以空格跳过的界面：尝试跳出错误界面，输入一次“空格”")
+    #         G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,"可以空格跳过的界面：尝试跳出错误界面，输入一次“空格”")
     #
     # # 非以上任何一个界面，可以ESC跳过的界面
     # @staticmethod
     # def Handle_Skip_ESC():
     #     if KeyOp.PressKey(OPKeyCode.ESC):
-    #         logging.warning("可以ESC跳过的界面：尝试跳出错误界面，输入一次“ESC”")
+    #         G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,"可以ESC跳过的界面：尝试跳出错误界面，输入一次“ESC”")
     #
 
-    @staticmethod
-    def Handle_Err_Main_PVEWarehouseFull():
-        logging.critical(
+    def Handle_Err_Main_PVEWarehouseFull(self):
+        G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.critical,
             f"临时仓库中存在未领取的征神魂玉，征神仓库已满。需要手动清理仓库，脚本已退出。\n")
         exit(-2)
 
@@ -1554,7 +1742,7 @@ class Automation:
         # 调用本函数的次数 = 故障后异常次数 = 连续异常次数 - 异常报故障次数
         ErrUI_ContCnt = PscRltAll[FAULT_TRANSITION_UI].contExCnt - PscCfgAll[FAULT_TRANSITION_UI].contExCnt
         if ErrUI_ContCnt >= ParamCnt.ExitErrUICnt_Max:
-            logging.critical(
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.critical,
                 f"\n连续调用错误界面处理函数Handle_Err_UI{ErrUI_ContCnt}次，仍然无法回到正常界面。脚本已结束运行！\n")
             exit(-1)
 
@@ -1562,42 +1750,42 @@ class Automation:
 
         # 移动鼠标到安全位置，点一下。
         # MouseOp.LeftClickPoint(WinInfo.Point_Safe_Click, self.ratio)
-        # logging.warning(f"尝试跳出错误界面：鼠标点击客户端{WinInfo.Point_Safe_Click}位置一次")
-        logging.error(
+        # G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,f"尝试跳出错误界面：鼠标点击客户端{WinInfo.Point_Safe_Click}位置一次")
+        G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
             f"连续{PscRltAll[FAULT_TRANSITION_UI].contExCnt}次识别到过渡界面，判定当前界面为错误界面，尝试跳出……")
 
         # 先判断是否在主界面错误点击了ESC
         if WinInfo.Text_Char_ESC_Select_OutGame in GetScrInfo.ocrAreaText(WinInfo.Area_Char_ESC_Select_OutGame):
-            logging.info(
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info,
                 f"Handle_Err_UI：OCR识别到进入主界面的ESC弹窗，点击“{WinInfo.Text_ESC_Select_OutGame_ReturnGame}”")
             if MouseOp.LeftClickPoint(WinInfo.Point_ESC_Select_OutGame_ReturnGame, self.ratio):
                 curUI = self.getCurUI()
                 if curUI == GameInfo.UI_PVE_Main_Prepare or curUI == GameInfo.UI_PVP_Main_Prepare:
-                    logging.info("返回主界面成功。")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "返回主界面成功。")
                     return
                 else:
-                    logging.info("未能成功返回主界面。")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "未能成功返回主界面。")
 
         # 然后判断是否在游戏内错误点击了ESC
         if WinInfo.Text_Char_ESC_Select_InGame in GetScrInfo.ocrAreaText(WinInfo.Area_Char_ESC_Select_InGame):
-            logging.info(f"Handle_Err_UI：OCR识别到进入游戏外ESC界面，点击“{WinInfo.Text_ESC_Select_InGame_ReturnGame}”")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"Handle_Err_UI：OCR识别到进入游戏外ESC界面，点击“{WinInfo.Text_ESC_Select_InGame_ReturnGame}”")
             if MouseOp.LeftClickPoint(WinInfo.Point_ESC_Select_InGame_ReturnGame, self.ratio):
                 curUI = self.getCurUI()
                 if (GameInfo.UI_PVE_Game_In_1_W <= curUI <= GameInfo.UI_PVE_Game_In_5_Succeed) \
                         or (curUI == GameInfo.UI_PVP_Game_In_WJSL):
-                    logging.info("返回游戏局内成功。")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "返回游戏局内成功。")
                     return
                 else:
-                    logging.info("未能成功返回返回游戏局内。")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "未能成功返回返回游戏局内。")
 
         # 其他错误界面，尝试轮流输入ESC或空格来跳过
         OP.Sleep(ParamTime.slp_cmd)
         if self.errUICnt % 2 == 0:
             if KeyOp.PressKey(OPKeyCode.Space):
-                logging.warning("尝试跳出错误界面：输入一次“空格”")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,"尝试跳出错误界面：输入一次“空格”")
         else:
             if KeyOp.PressKey(OPKeyCode.ESC):
-                logging.warning("尝试跳出错误界面：输入一次“ESC”")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,"尝试跳出错误界面：输入一次“ESC”")
 
     # ————————————————————————————————————————————————————————————————————
     # 更新窗口状态信息：#窗口是否存在、窗口是否正常响应、窗口是否激活、窗口尺寸是否正确
@@ -1647,7 +1835,7 @@ class Automation:
         if not self.windowStates[WIN_STATE_EXIST]:
             # 【1-解决办法】启动游戏
             # self.startGame()
-            print("启动游戏。【功能未实现】")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "启动游戏。【功能未实现】")
 
         # 【2-发现问题】窗口是否正常响应？无响应则重新启动程序
         # 【】【】有问题。目前这个状态会一直报故障。先不管。
@@ -1655,17 +1843,17 @@ class Automation:
             # 【2-解决办法】重启游戏
             # self.closeGame()
             # self.startGame()
-            print("关闭游戏。【功能未实现】")
-            print("启动游戏。【功能未实现】")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "关闭游戏。【功能未实现】")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "启动游戏。【功能未实现】")
 
         # 【3-发现问题】窗口是否处于激活状态（在前台显示）？未激活则激活窗口
         if self.pcsCnt % ParamCnt.cntCycActive == 0:  # 每5个周期激活一次窗口。不能每个周期都检查，不然就没法关闭游戏了。
             if not self.windowStates[WIN_STATE_ACTIVE]:  # 如果当前不是激活状态
                 if OP.SetWindowState(self.hwnd, 12) == 1:  # 激活窗口，显示到前台
                     OP.SetWindowState(self.hwnd, 7)
-                    logging.info(f"检测到窗口未激活，尝试激活窗口成功。")
+                    G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"检测到窗口未激活，尝试激活窗口成功。")
                 else:
-                    logging.error(f"检测到窗口未激活，尝试激活窗口失败！")
+                    G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"检测到窗口未激活，尝试激活窗口失败！")
 
         # 【4-发现问题】窗口区域/尺寸是否发生变化？如果和设置的预期尺寸及位置不同，会导致脚本无法正常识别指定区域
         if not self.windowStates[WIN_STATE_AREA_OK]:
@@ -1699,7 +1887,7 @@ class Automation:
             if OP.SetWindowState(self.hwnd, 0) != 1:
                 # ————————————————————————————————————————————————————————————————————
 
-                logging.error(f"尝试第{retryCnt}关闭窗口失败！")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"尝试第{retryCnt}关闭窗口失败！")
             OP.Sleep(ParamTime.closeWinWait)  # 每次发送完关闭窗口的指令后，等待5秒
 
     # ————————————————————————————————————————————————————————————————————
@@ -1716,16 +1904,15 @@ class Automation:
             # ————————————————————————————————————————————————————————————————————
 
             OP.Sleep(ParamTime.gameStartWaitTime)  # 启动后，等一段时间秒，让程序起来再说
-
             if not self.initSelf():
-                logging.error(f"初始化失败。")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"初始化失败。")
                 return False
 
             if not self.entryGame():
                 return False
 
             return True
-        logging.error(f"游戏窗口尚未关闭，无法重新启动游戏。")
+        G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"游戏窗口尚未关闭，无法重新启动游戏。")
         return False
 
     # 启动游戏后，怎么进入游戏正常界面
@@ -1746,11 +1933,11 @@ class Automation:
             OP.Sleep(ParamTime.gameStart2ToMainUI)
             # 跳过启动界面2后，如果识别到了特征图片“账号异常”。该故障不可恢复。需要关闭游戏，然后重启游戏
             if GetScrInfo.findPic(WinInfo.Pic_Char_Game_Start_2_Account_Err, self.clientArea)[2] > 0:
-                logging.critical(f"账号异常！必须关闭游戏再重启游戏。")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.critical,f"账号异常！必须关闭游戏再重启游戏。")
                 return False
             # 跳过启动界面2后，如果识别到了特征区域的特征字符串“账号异常”。该故障不可恢复。需要关闭游戏，然后重启游戏
             elif WinInfo.Text_Char_Game_Start_2_Err in GetScrInfo.ocrAreaText(WinInfo.Area_Char_Game_Start_2_Err):
-                logging.critical(f"账号异常！必须关闭游戏再重启游戏。")
+                G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.critical,f"账号异常！必须关闭游戏再重启游戏。")
                 return False
             self.getCurUI()
             # 如果最后进入到游戏主界面/每日消息弹窗界面，那么就认为游戏启动成功
@@ -1806,12 +1993,15 @@ class Automation:
             return False
 
     # 检测用户输入暂停键，则休眠脚本
-    @staticmethod
-    def UserPause():
+    def UserPause(self) -> bool:
+        if self.endFlg:
+            return False
         if KeyOp.DetectKey(ParamCnt.Key_User_Pause):
-            print(f"检测到用户输入暂停键，脚本休眠{ParamTime.slp_User_Pause}ms")
-            logging.critical(f"检测到用户输入暂停键，脚本休眠{ParamTime.slp_User_Pause}ms")
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"检测到用户输入暂停键，脚本休眠{ParamTime.slp_User_Pause}ms")
+            # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"检测到用户输入暂停键，脚本休眠{ParamTime.slp_User_Pause}ms")
+            # G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.critical,f"检测到用户输入暂停键，脚本休眠{ParamTime.slp_User_Pause}ms")
             OP.Sleep(ParamTime.slp_User_Pause)
+        return True # 这个True其实没啥用，因为已经执行完休眠才返回True
 
     # 获取无尽试炼模式的经验值
     @staticmethod
@@ -1819,18 +2009,18 @@ class Automation:
         OP.Sleep(ParamTime.slp_OCR)
         EXE1 = 0
         # EXPstr = GetScrInfo.ocrAreaText(WinInfo.Area_WJSL_EXE_Area_1)  # 如果截图指成功
-        # # logging.info(f"getEXP_WJSJ：OCR识别到经验值字符串：{EXPstr}")
+        # # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getEXP_WJSJ：OCR识别到经验值字符串：{EXPstr}")
         # EXPstr_int = re.findall(r"\d+", EXPstr)[0]
         # try:
         #     EXE1 = int(EXPstr_int)
         # except ValueError:
-        #     print(f"Error: '{EXPstr_int}' is not a valid integer.")
+        #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"Error: '{EXPstr_int}' is not a valid integer.")
         #     EXE1 = ParamCnt.EXE_DEFAULT_WJSL
-        # # logging.info(f"getEXP_WJSJ：OCR识别到经验值：{curEXP}")
+        # # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"getEXP_WJSJ：OCR识别到经验值：{curEXP}")
         # # 经验值有自己的合理范围，如果不在合理范围内，就置0
         # if not (ParamCnt.EXE_MIN_WJSL <= EXE1 <= ParamCnt.EXE_MAX_WJSL):
         #     EXE1 = ParamCnt.EXE_DEFAULT_WJSL
-        #     logging.warning(f"OCR识别通行证经验值失败，记为默认经验值{ParamCnt.EXE_DEFAULT_WJSL}。")
+        #     G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.warning,f"OCR识别通行证经验值失败，记为默认经验值{ParamCnt.EXE_DEFAULT_WJSL}。")
         return EXE1
 
 class Tools:
@@ -1848,7 +2038,7 @@ class Tools:
                 OP.Sleep(1000)   #按住Shift 0.5秒后，可以开始奔跑
                 if OP.KeyUp(OPKeyCode.Shift) == 1:
                     cnt = int(runTime / intervalE)
-                    # print(f"cnt={cnt}")
+                    # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"cnt={cnt}")
                     idx = 0
                     while idx < cnt:
                         OP.Sleep(intervalE)
@@ -1874,14 +2064,18 @@ class Tools:
             OP.MoveTo(int(curPos[0])/2, int(curPos[1])/2)
         print(Pos)
 
-def RunAuto():
-    Tools.FindBossBenTi([0, 0, 1920, 1080])
-    a = OP.FindMultiColor(19,654,60,696,"408b54","27|-8|fff0e8,52|-6|42a2d1,67|16|805998", 1, 0)
-    auto = Automation()
-    if auto.initSelf():
-        # 初始化成功，开始自动化
-        auto.auto_play()
+# def run_auto():
+#     Tools.FindBossBenTi([0, 0, 1920, 1080])
+#     a = OP.FindMultiColor(19,654,60,696,"408b54","27|-8|fff0e8,52|-6|42a2d1,67|16|805998", 1, 0)
+#     auto = Automation(PC_NAME, GAME_MODE_CUR)
+#     if auto.initSelf():
+#         # 初始化成功，开始自动化
+#         auto.auto_play()
 
 
 if __name__ == "__main__":
-    RunAuto()
+    ui_loader = QUiLoader()  # PySide6的bug，需要在QApplication前先实例这个类
+    app = QApplication(sys.argv)  # 创建应用
+    GameAutoGUI = Automation()
+    GameAutoGUI.ui.show()
+    sys.exit(app.exec())  # 开始执行程序，并且进入消息循环等待

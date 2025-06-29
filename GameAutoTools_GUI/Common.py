@@ -1,5 +1,5 @@
 import logging  #日志记录
-
+from enum import    Enum
 
 #调整日志记录形式：以文本形式记录
 LOG_FORMAT = "%(asctime)s- %(levelname)s -%(message)s"
@@ -8,6 +8,11 @@ log_file_handler = logging.FileHandler(log_file_name, encoding='GBK')   #GB18030
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT, handlers={log_file_handler})
 # logging.basicConfig(filename=log_file_name, level=logging.DEBUG, format=LOG_FORMAT)
 
+class LogLevel(Enum):
+    info = 1
+    warning = 2
+    error = 3
+    critical = 4
 
 #————————————————————————————————————————————————————
 # 周期自检 periodic self-check:PSC
