@@ -3,14 +3,28 @@ import random   #实现随机数
 from ctypes import windll
 from Common import *
 
+#======================================================
+Config_File_Path = './config.yml'          #配置文件所在路径
+#======================================================
 PC_ThinkBook16P = "ThinkBook16P"
-PC_MyServer = "MyServer"
+PC_MyServer = "MyServer"    #已作废
 PC_WuJie14X = "WuJie14X"
 PC_Desktop = "Desktop"
 
 #======================================================
 PC_NAME = PC_Desktop                    #当前所用的电脑
 #======================================================
+
+YML = RwYaml(filename = Config_File_Path)
+if YML.file_read_success:
+    # 读取配置表成功，才能进行操作
+    conf = ConfigDict(YML.config)  # 从config.yml文件中读取所有的配置信息
+    conf_base = ConfigDict(conf.base)  # 基本设置信息
+    # globals()['PC_NAME']
+    PC_NAME = conf_base.get_nested('pc_name', default=PC_ThinkBook16P)
+else:
+    print(f"OPFuncs：读取配置文件失败，脚本退出。")
+    exit(-2)
 
 if PC_NAME == PC_MyServer:
     # 服务器

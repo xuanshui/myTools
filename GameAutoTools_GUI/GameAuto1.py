@@ -29,8 +29,8 @@ class   MySignal(QObject):
 # 全局变量
 # 信号
 G_Sig = MySignal()
-# 控制GUI相关代码的初始化次数
-G_GuiInit = False
+# # 控制GUI相关代码的初始化次数
+# G_GuiInit = False
 
 # class WorkerThread(QThread):
 #     # 定义信号
@@ -101,6 +101,20 @@ class Automation:
         self.gameMode = ""        #设置的游戏模式
         self.realGameMode = ""  # 游戏实际的模式
         self.curHero = ""  # 当前选择的英雄
+        self.YML = RwYaml(filename = Config_File_Path)
+        if self.YML.file_read_success:
+        # 读取配置表成功，才能进行操作
+            self.conf =  ConfigDict(self.YML.config)  # 从config.yml文件中读取所有的配置信息
+            self.conf_base = ConfigDict(self.conf.base) #基本设置
+            self.conf_hsbl = ConfigDict({}) #黄沙百炼的设置信息
+
+            # a = self.conf_dict.hsbl.desktop.p1.sleep
+            # b = self.conf_dict.get_nested('hsbl.desktop.p2.move', default=[315,-110])[1]
+            # c = self.conf_dict['hsbl']['desktop']['p1']['sleep']
+        else:
+            print(f"配置文件config.yml读取失败！脚本已退出！")
+            return
+
 
         # ——————————不同界面对应的处理方法——————————
         self.dict_UIHandle = {
@@ -172,33 +186,48 @@ class Automation:
 
         # ——————————图形化界面相关——————————
         # 只能在实例化类的时候运行一次，后续调用__init__方法时不能运行
-        if not globals().get('G_GuiInit', False):
-            # 线程
-            self.thread = None
-            # 自定义信号的处理
-            G_Sig.text_print.connect(self.Info)
-            G_Sig.cyc_update.connect(self.update_cyc_info)
-            self.ui = ui_loader.load("UI/mainWindow.ui")
-            # 槽函数
-            self.ui.btn_start.clicked.connect(self.startScript)  # 开始自动操作
-            self.ui.btn_end.clicked.connect(self.endScript)  # 立即结束脚本
-            # 初始化游戏模式
-            self.ui.cBox_gameMode.addItem(GAME_MODE_PVP_WJSL)
-            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_XMGD)
-            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HMZN)
-            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_WXJL)
-            self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HSBL)
-            # 初始化平台名称
-            self.ui.cBox_pcName.addItem(PC_ThinkBook16P)
-            self.ui.cBox_pcName.addItem(PC_MyServer)
-            self.ui.cBox_pcName.addItem(PC_WuJie14X)
-            self.ui.cBox_pcName.addItem(PC_Desktop)
+        # if not globals().get('G_GuiInit', False):
+        # 线程
+        self.thread = None
+        # 自定义信号的处理
+        G_Sig.text_print.connect(self.Info)
+        G_Sig.cyc_update.connect(self.update_cyc_info)
+        self.ui = ui_loader.load("UI/mainWindow.ui")
 
-            self.ui.btn_end.setEnabled(False)  # 禁用停止按钮
+        # 初始化游戏模式
+        self.ui.cBox_gameMode.addItem(GAME_MODE_PVP_WJSL)
+        self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_XMGD)
+        self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HMZN)
+        self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_WXJL)
+        self.ui.cBox_gameMode.addItem(GAME_MODE_PVE_HSBL)
+        # 初始化平台名称
+        self.ui.cBox_pcName.addItem(PC_ThinkBook16P)
+        self.ui.cBox_pcName.addItem(PC_MyServer)
+        self.ui.cBox_pcName.addItem(PC_WuJie14X)
+        self.ui.cBox_pcName.addItem(PC_Desktop)
+        # 禁用停止按钮
+        self.ui.btn_end.setEnabled(False)
+
+        # 从配置文件中获取电脑平台、游戏模式，并更新到UI交互界面
+        self.pcName = self.conf_base.get_nested("pc_name")
+        self.gameMode = self.conf_base.get_nested("game_mode")
+        self.ui.cBox_pcName.setCurrentText(self.pcName)  # 电脑平台
+        self.ui.cBox_gameMode.setCurrentText(self.gameMode)
+
+
+        # 槽函数：要放在界面初始化之后，不然会在初始化时触发下面的槽函数
+        self.ui.btn_start.clicked.connect(self.startScript)  # 开始自动操作
+        self.ui.btn_end.clicked.connect(self.endScript)  # 立即结束脚本
+        self.ui.cBox_gameMode.currentTextChanged.connect(self.save_conf_base)  # 模式、平台发生变化时保存到配置文件
+        self.ui.cBox_pcName.currentTextChanged.connect(self.save_conf_base)  # 模式、平台发生变化时保存到配置文件
+
+
+
 
     def startScript(self):
         self.ui.btn_start.setEnabled(False)  # 同时运行的脚本个数只能为1
         self.ui.btn_end.setEnabled(True)  # 使能停止按钮
+        self.endFlg = False                 #重置结束标识
 
         self.thread = Thread(target=self.mainThread,
                         # args=('参数1', '参数2'),
@@ -240,6 +269,23 @@ class Automation:
         textBrowser.append(text)
         return
 
+    # 保存配置文件信息
+    def save_conf_base(self):
+        # 电脑平台
+        tmp_pcName = self.ui.cBox_pcName.currentText()
+        if tmp_pcName != "" and tmp_pcName != self.pcName:
+            self.pcName = tmp_pcName
+            self.conf_base.set_nested("pc_name", value=tmp_pcName)   #更新程序使用的配置信息
+            self.YML.write_value("base", "pc_name", value=tmp_pcName)        #更新配置信息到配置文件
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的电脑平台：{self.pcName}")  #UI界面提示更新成功
+        # 游戏模式
+        tmp_gameMode = self.ui.cBox_gameMode.currentText()
+        if tmp_gameMode != "" and tmp_gameMode != self.gameMode:
+            self.gameMode = tmp_gameMode
+            self.conf_base.set_nested("game_mode", value=tmp_gameMode)   #更新程序使用的配置信息
+            self.YML.write_value("base", "game_mode", value=tmp_gameMode)        #更新配置信息到配置文件
+            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的游戏模式：{self.gameMode}")  #UI界面提示更新成功
+
     # 更新周期计数
     @staticmethod
     def update_cyc_info(textBrowser, msg):
@@ -248,8 +294,8 @@ class Automation:
     # 游戏启动后，重新获取窗口句柄hwnd、坐标系倍率ratio、窗口信息
     def initSelf(self) -> bool:
         # 重新调用一遍，初始化类的属性
-        globals()['G_GuiInit'] = True  # GUI相关代码已初始化
-        self.__init__()
+        # globals()['G_GuiInit'] = True  # GUI相关代码已初始化
+        # self.__init__()
 
         # 【1】如果OP绑定过窗口，解绑OP对象之前绑定的窗口
         if OP.IsBind() == 1:
@@ -284,20 +330,48 @@ class Automation:
         # mouseRatio = self.getMouseRatio()
         # 【6】判断脚本设置的游戏模式 和 游戏实际模式是否一致？不一致则直接退出
         if not self.checkGameMode():
-            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"游戏实际模式（{self.realGameMode}）与脚本设置模式（{self.gameMode}）不同，脚本已退出。")
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
+                                  f"游戏实际模式（{self.realGameMode}）与脚本设置模式（{self.gameMode}）不同，脚本已退出。")
             self.endScript()
         return True
 
-    def checkGameMode(self):
-        # 获取设置信息
-        self.pcName = self.ui.cBox_pcName.currentText()  # 电脑平台
-        self.gameMode = self.ui.cBox_gameMode.currentText()  # 设置的游戏模式
+    def checkGameMode(self) -> bool:
+        # 每次“开始”时要重新读取配置信息
+        self.YML = RwYaml(filename=Config_File_Path)
+        if self.YML.file_read_success:
+            # 读取配置表成功，才能进行操作
+            self.conf = ConfigDict(self.YML.config)  # 从config.yml文件中读取所有的配置信息
+            self.conf_base = ConfigDict(self.conf.base)  # 基本设置
+            self.conf_hsbl = ConfigDict({})  # 黄沙百炼的设置信息
+            # 从配置文件中获取电脑平台、游戏模式，并更新到UI交互界面
+            self.pcName = self.conf_base.get_nested("pc_name")
+            self.gameMode = self.conf_base.get_nested("game_mode")
+        # 根据不同的电脑平台获取不同的设置信息
+        if self.pcName == PC_Desktop:
+            self.conf_hsbl = ConfigDict(self.conf.hsbl.desktop)  # 黄沙百炼-Desktop的配置信息
+        elif self.pcName == PC_ThinkBook16P:
+            self.conf_hsbl = ConfigDict(self.conf.hsbl.thinkbook16p)  # 黄沙百炼-Desktop的配置信息
+        elif self.pcName == PC_WuJie14X:
+            self.conf_hsbl = ConfigDict(self.conf.hsbl.wujie14x)  # 黄沙百炼-Desktop的配置信息
+        else:
+            self.conf_hsbl = {}
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
+                                  f"当前平台（{self.pcName}）不在脚本范围内，脚本已退出。")
+            self.endScript()
+            return False
+        if self.conf_hsbl == {}:
+            G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
+                                  f"获取配置表为空，脚本已退出。")
+            self.endScript()
+            return False
+        # 设置的游戏模式
+
         if self.pcName == "":
             G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "未能获取到用户设置的电脑平台，脚本已退出")
-            exit(-3)
+            return False
         if self.gameMode == "":
             G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, "未能获取到用户设置的游戏模式，脚本已退出")
-            exit(-3)
+            return False
         tryCnt = 1  #最多识别6次，只要有任意一次识别正确，那就上报正常。
         while tryCnt < 7:
             OP.Sleep(tryCnt * 200)
@@ -925,37 +999,37 @@ class Automation:
         # 鼠标DPI：2000，
         # Windows11系统设置中鼠标速度：10， 控制面板的指针选项的“选择指针移动速度”为第6格的位置，并且关闭“增强指针精确度”
         # ——————————————————————————————————————————————————————————————————————————————————————————————
-        if self.pcName == "MyServer":
-            OP.Sleep(3000)  #由于MyServer处理器和显卡性能极差，故需要等待3秒，让地图加载完毕
+        OP.Sleep(self.conf_hsbl.get_nested('p1.sleep', default=1000))
+        # OP.Sleep(3000)  #由于MyServer处理器和显卡性能极差，故需要等待3秒，让地图加载完毕  #【可调参数】
         # ————————1、前进到P2，调整视角———————————————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        KeyOp.HoldTwoKey(OPKeyCode.W, 1020, OPKeyCode.Shift, 1000)
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p2.run', default=[1020,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p2.run', default=[1020,1000])[1])  #【可调参数】
         OP.Sleep(300)
-        MouseOp.MoveR(round(315 * mouse_ratio), -round(110 * mouse_ratio))  # 视角往右、往上移动
-        OP.Sleep(300)
-        if self.pcName == "MyServer":
-            OP.Sleep(200)   # 电脑性能差，多休眠一段时间
+        MouseOp.MoveR(
+            round((self.conf_hsbl.get_nested('p2.move', default=[315,-110])[0]) * mouse_ratio),
+            round((self.conf_hsbl.get_nested('p2.move', default=[315,-110])[1]) * mouse_ratio))  # 视角往右、往上移动  #【可调参数】
+        # OP.Sleep(300)
+        OP.Sleep(self.conf_hsbl.get_nested('p2.sleep', default=200))   # 电脑性能差，多休眠一段时间  #【可调参数】
         # ————————2、钩锁到P3————————————————————————————————————————————————————————————————————————————
         # 到达P2，视角已调整，按Q+鼠标左键
         KeyOp.PressKey(OPKeyCode.Q)
         OP.Sleep(300)
         MouseOp.LeftClickNow()
-        if self.pcName == "ThinkBook16P":
-            OP.Sleep(3000)
-        elif self.pcName == "Desktop":
-            OP.Sleep(3000)
-        elif self.pcName == "MyServer":
-            OP.Sleep(4000)
+        OP.Sleep(self.conf_hsbl.get_nested('p3.sleep', default=3000))  #【可调参数】
+
         # ————————3、前进到P4，调整视角———————————————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        KeyOp.HoldTwoKey(OPKeyCode.W, 1400, OPKeyCode.Shift, 1000)  # 在平台上移动
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p4.run', default=[1400,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p4.run', default=[1400,1000])[1])  # 在平台上移动  #【可调参数】
         # MouseOp.MoveR(-round(106 * mouse_ratio), round(85 * mouse_ratio))  # 视角往左下角移动
-        if self.pcName == "ThinkBook16P":
-            MouseOp.MoveR(-round(103 * mouse_ratio), -round(32 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
-        elif self.pcName == "Desktop":
-            MouseOp.MoveR(-round(110 * mouse_ratio), -round(25 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
-        elif self.pcName == "MyServer":
-            MouseOp.MoveR(-round(110 * mouse_ratio), -round(25 * mouse_ratio))  # 视角往左上角移动：变更钩锁点
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p4.move', default=[-110,-25])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p4.move', default=[-110,-25])[1] * mouse_ratio))  # 视角往左上角移动：变更钩锁点  #【可调参数】
         OP.Sleep(300)
         # ————————4、钩锁P5飞袭到P6————————————————————————————————————————————————————————————————————————
         # 到达P4，视角已调整，按Q+鼠标左键。
@@ -963,33 +1037,25 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.Q)
         OP.Sleep(200)
         MouseOp.LeftClickNow()
-        OP.Sleep(1600)  # 休眠1秒，在接左键飞袭
-        if self.pcName == "ThinkBook16P":
-            OP.Sleep(2000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
-        elif self.pcName == "Desktop":
-            MouseOp.LeftClickNow()
-            OP.Sleep(2700)  # 休眠，等待钩锁攻击结束，然后才能奔跑    #微调
-        elif self.pcName != "MyServer":   # MyServer性能太差，钩锁会导致卡顿。故不使用钩锁。只落到那个空中平台上，然后奔跑到P7
-            OP.Sleep(3000)  # 休眠，等待钩锁攻击结束，然后才能奔跑
+        OP.Sleep(self.conf_hsbl.get_nested('p5p6.sleep1', default=1600))  # 休眠1秒，在接左键飞袭  #【可调参数】
+        MouseOp.LeftClickNow()
+        OP.Sleep(self.conf_hsbl.get_nested('p5p6.sleep2', default=2700))  # 休眠，等待钩锁攻击结束，然后才能奔跑  #【可调参数】
         # KeyOp.PressKey(OPKeyCode.C) #有可能挂在钩锁点，所以需要C下坠。：后来发现，如果挂上去了，就算下坠下来，方向也变了。所以没必要。
         # OP.Sleep(1500)
         # ————————5、前进到P7，调整视角，火炮攻击2次———————————————————————————————————————————————————
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if self.pcName == "ThinkBook16P":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 3650, OPKeyCode.Shift, 1000)  # 奔跑到P7，由于钩锁点变更，需要奔跑更远
-        elif self.pcName == "Desktop":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 2500, OPKeyCode.Shift, 1000)  # 奔跑到P7
-        elif self.pcName == "MyServer":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 3650, OPKeyCode.Shift, 1000)  # 奔跑到P7，由于空中平台上，故需要多跑一段时间
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p7.run', default=[3650,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p7.run', default=[3650,1000])[1])  # 奔跑到P7，由于空中平台上，故需要多跑一段时间  #【可调参数】
         KeyOp.PressKey(OPKeyCode.Num2)  # 数字键2切换火炮
         OP.Sleep(300)
         KeyOp.PressKey(OPKeyCode.Num2)  # 数字键2切换火炮-多切换一次，防止切换失败。
         OP.Sleep(800)
         # MouseOp.MoveR(-round(415 * mouse_ratio), round(90 * mouse_ratio))  # 视角往左下移动，瞄准野怪
-        if self.pcName == "Desktop":    #微调
-            MouseOp.MoveR(-round(370 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
-        else:
-            MouseOp.MoveR(-round(415 * mouse_ratio), round(207 * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p7.move1', default=[-415,207])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p7.move1', default=[-415,207])[1] * mouse_ratio))  # 视角往左下移动，瞄准野怪：由于钩锁点变化，故此处也变化  #【可调参数】
         OP.Sleep(500)
         # for fireCnt in range(1, 3, 1):  # 火炮攻击2次。其实无需火炮，F技能火球就能击杀小怪。但是稳妥起见，火炮攻击。
         #     MouseOp.LeftClickNow()
@@ -999,50 +1065,42 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.F)  # 使用F技能：火球。防止F失败，多F一次
         OP.Sleep(1200)
         # MouseOp.MoveR(-160, 0)  # 视角往左移动
-        if self.pcName == "Desktop":    #微调
-            MouseOp.MoveR(-round(195 * mouse_ratio), 0)  # 上一处转的角度小，这里补回来
-        else:
-            MouseOp.MoveR(-round(150 * mouse_ratio), 0)  # 视角往左移动
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p7.move2', default=[-150,0])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p7.move2', default=[-150,0])[1] * mouse_ratio))  # 视角往左移动  #【可调参数】
         OP.Sleep(800)
         # ————————6、前进到P8，调整视角，前进到P9————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if self.pcName == "ThinkBook16P":
-            # KeyOp.HoldTwoKey(OPKeyCode.W, 1150, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-            KeyOp.HoldTwoKey(OPKeyCode.W, 2200, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-        elif self.pcName == "Desktop":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 1230, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
-        elif self.pcName == "MyServer":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 1182, OPKeyCode.Shift, 1000)  # 奔跑到达拐点P8
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p8.run1', default=[2200,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p8.run1', default=[2200,1000])[1])  # 奔跑到达拐点P8  #【可调参数】
         # OP.Sleep(2600)  # 这里到达P8是个下坡，可能会有滑落动作，等2秒
         OP.Sleep(600)  # P8现在是挂壁状态
-        if self.pcName == "ThinkBook16P":
-            MouseOp.MoveR(-round(190 * mouse_ratio * 1.12), -round(55 * mouse_ratio * 1.1))  # 视角往左上移动
-        elif self.pcName == "Desktop":
-            MouseOp.MoveR(-190, -55)  # 视角往左上移动
-        elif self.pcName == "MyServer":
-            MouseOp.MoveR(-round(193 * mouse_ratio), -round(55 * mouse_ratio))  # 视角往左上移动
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p8.move1', default=[-193,-55])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p8.move1', default=[-193,-55])[1] * mouse_ratio))  # 视角往左上移动  #【可调参数】
         OP.Sleep(500)
         # 到达P8后，如果继续往前，可能会出现卡脚的情况，必须先往左转走两步，再复原视角，解决卡脚问题。
         KeyOp.PressKey(OPKeyCode.C)  # 挂壁，要先落下，才能行走
         OP.Sleep(800)
-        MouseOp.MoveR(-580, 0)  # 视角往左移动
-        KeyOp.HoldKey(OPKeyCode.W, 660) # 走一下
+        MouseOp.MoveR(self.conf_hsbl.get_nested('p8.move2', default=[-580,0])[0],
+                      self.conf_hsbl.get_nested('p8.move2', default=[-580,0])[1])  # 视角往左移动  #【可调参数】
+        KeyOp.HoldKey(OPKeyCode.W, self.conf_hsbl.get_nested('p8.walk', default=660)) # 走一下  #【可调参数】
         OP.Sleep(300)
-        MouseOp.MoveR(580, 0)  # 视角往右移动
+        MouseOp.MoveR(self.conf_hsbl.get_nested('p8.move3', default=[580, 0])[0],
+                      self.conf_hsbl.get_nested('p8.move3', default=[580, 0])[1])  # 视角往右移动  #【可调参数】
         OP.Sleep(300)
-        if self.pcName == "ThinkBook16P":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 400, OPKeyCode.Shift, 1000)  # 到达P9
-        elif self.pcName == "Desktop":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 680, OPKeyCode.Shift, 1000)  # 到达P9
-        elif self.pcName == "MyServer":
-            KeyOp.HoldTwoKey(OPKeyCode.W, 725, OPKeyCode.Shift, 1000)  # 到达P9
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p8.run2', default=[400,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p8.run2', default=[400,1000])[1])  # 到达P9  #【可调参数】
         OP.Sleep(800)
         # ————————7、在P9，调整视角，火炮远程攻击————————————————————————————————————————————————————————
         self.UserPause()    # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        if self.pcName == "ThinkBook16P":
-            MouseOp.MoveR(round(260 * mouse_ratio * 1.02), -round(20 * mouse_ratio))  # 视角往右上移动
-        elif self.pcName == "Desktop" or self.pcName == "MyServer":
-            MouseOp.MoveR(round(260 * mouse_ratio), -round(20 * mouse_ratio))  # 视角往右上移动
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p9.move1', default=[260,-20])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p9.move1', default=[260,-20])[1] * mouse_ratio))  # 视角往右上移动  #【可调参数】
         OP.Sleep(1500)
         for fireCnt in range(1, 4, 1):  # 火炮攻击3次(可能有天赐武备匣效果)
             MouseOp.LeftClickNow()
@@ -1050,10 +1108,10 @@ class Automation:
         OP.Sleep(1000)
         # ————————7、继续待在P9原地不动，调整视角，火炮远程攻击———————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
-        MouseOp.MoveR(-round(106 * mouse_ratio), round(60 * mouse_ratio))  # 视角左下移动
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p9.move2', default=[-106,60])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p9.move2', default=[-106,60])[1] * mouse_ratio))  # 视角左下移动  #【可调参数】
         OP.Sleep(800)
-        if self.pcName == "MyServer":
-            OP.Sleep(1000)
         # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
         # OP.Sleep(600)
         # KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
@@ -1066,8 +1124,8 @@ class Automation:
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮
         OP.Sleep(600)
         KeyOp.PressKey(OPKeyCode.R)  # 维修火炮-因为可能一次维修不成功
-        OP.Sleep(2000)
-        for fireCnt in range(1, 7, 1):  # 火炮攻击7次(可能有天赐武备匣效果)    # 20250629：从11次改为7次
+        OP.Sleep(2500)
+        for fireCnt in range(1, 8, 1):  # 火炮攻击8次，实际效果是7次(可能有天赐武备匣效果)    # 20250629：从11次改为7次
             MouseOp.LeftClickNow()
             OP.Sleep(random.randint(1900, 2000))
             # G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"fireCnt={fireCnt}")
@@ -1082,56 +1140,44 @@ class Automation:
         # ————————9、调整视角，前往P10，开两炮，再调整视角——————————————————————————————————————————————————————————
         self.UserPause()  # 检测用户输入暂停键:如果用户按下暂停键，则休眠30秒
         OP.Sleep(1500)
-        if self.pcName == "ThinkBook16P":
-            MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
-        elif self.pcName == "Desktop":
-            MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
-        elif self.pcName == "MyServer":
-            MouseOp.MoveR(-round(78 * mouse_ratio), 0)  # 视角平行往左移动
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p10.move', default=[-78,0])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p10.move', default=[-78,0])[1] * mouse_ratio))  # 视角平行往左移动  #【可调参数】
         OP.Sleep(600)
-        KeyOp.HoldTwoKey(OPKeyCode.W, 1700, OPKeyCode.Shift, 1000)  # 前进到P10
+        KeyOp.HoldTwoKey(OPKeyCode.W,
+                         self.conf_hsbl.get_nested('p10.run', default=[1700,1000])[0],
+                         OPKeyCode.Shift,
+                         self.conf_hsbl.get_nested('p10.run', default=[1700,1000])[1])  # 前进到P10  #【可调参数】
         OP.Sleep(600)
         # ===改进代码：到达P10后，向3个方向攻击（3个方向的角度和为355），提高成功几率（不能保证一定成功）===
-        MouseOp.MoveR(round(60 * mouse_ratio), -round(75 * mouse_ratio))  # 视角往右移动10度、往上移动一些
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p11.move1', default=[60,-75])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p11.move1', default=[60,-75])[1] * mouse_ratio))  # 视角往右移动10度、往上移动一些  #【可调参数】
         OP.Sleep(1000)
-        # MouseOp.LeftClickNow()  # 火炮攻击
-        # OP.Sleep(2000)
         MouseOp.LeftClickNow()  # 火炮攻击一次
-        OP.Sleep(2000)
-        if self.pcName == "ThinkBook16P":
-            MouseOp.MoveR(round(298 * mouse_ratio), 0)  # 视角平行往右移动60度
-        elif self.pcName == "Desktop":
-            MouseOp.MoveR(round(295 * mouse_ratio), 0)  # 视角平行往右移动60度
-        elif self.pcName == "MyServer":
-            MouseOp.MoveR(round(305 * mouse_ratio), 0)  # 视角平行往右移动60度
+        OP.Sleep(2200)
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p11.move2', default=[298,0])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p11.move2', default=[298,0])[1] * mouse_ratio))  # 视角平行往右移动60度  #【可调参数】
         OP.Sleep(1000 )
-        # MouseOp.LeftClickNow()  # 火炮攻击
-        # OP.Sleep(1650)
         MouseOp.LeftClickNow()  # 火炮攻击一次
-        OP.Sleep(2000)
-        if self.pcName == "Desktop":    #微调
-            MouseOp.MoveR(127, 0)  # 视角平行往右移动
-            OP.Sleep(1000)
-            MouseOp.LeftClickNow()  # 火炮攻击一次
-            OP.Sleep(2300)
-            MouseOp.MoveR(-127, 0)  # 视角平行往左移动
-            OP.Sleep(1000)
-        else:
-            MouseOp.MoveR(150, 0)  # 视角平行往右移动
-            OP.Sleep(1000)
-            MouseOp.LeftClickNow()  # 火炮攻击一次
-            OP.Sleep(2300)
-            MouseOp.MoveR(-150, 0)  # 视角平行往左移动
-            OP.Sleep(1000)
+        OP.Sleep(2200)
+
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p11.move3', default=[150,0])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p11.move3', default=[150,0])[1] * mouse_ratio))  # 视角平行往右移动  #【可调参数】
+        OP.Sleep(1000)
+        MouseOp.LeftClickNow()  # 火炮攻击一次
+        OP.Sleep(2200)
+        MouseOp.MoveR(
+            round(self.conf_hsbl.get_nested('p11.move4', default=[-150, 0])[0] * mouse_ratio),
+            round(self.conf_hsbl.get_nested('p11.move4', default=[-150, 0])[1] * mouse_ratio))  # 视角平行往左移动  #【可调参数】
+        OP.Sleep(1000)
 
         # ————————10、前往P12，并E开箱————————————————————————————————————————————————————————————————————
-        Tools.RunAndE(1200, 120)    # 一边跑，一边E
-        # if self.pcName == "ThinkBook16P":
-        #     KeyOp.HoldTwoKey(OPKeyCode.W, 950, OPKeyCode.Shift, 1000)
-        # elif self.pcName == "Desktop":
-        #     KeyOp.HoldTwoKey(OPKeyCode.W, 830, OPKeyCode.Shift, 1000)
-        # elif self.pcName == "MyServer":
-        #     KeyOp.HoldTwoKey(OPKeyCode.W, 1140, OPKeyCode.Shift, 1000)
+        Tools.RunAndE(
+            self.conf_hsbl.get_nested('p12.run', default=[1200,120])[0],
+            self.conf_hsbl.get_nested('p12.run', default=[1200,120])[1])    # 一边跑，一边E  #【可调参数】
         OP.Sleep(100)
         KeyOp.PressKey(OPKeyCode.E) # 多E一次
         OP.Sleep(1000)
@@ -1580,7 +1626,8 @@ class Automation:
             if usedFatigue == 0:
                 G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,f"上局游戏未能消耗疲劳值！")
         else:
-            G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
+            if self.gameCnt > 1: #只在第二局游戏时开始判断
+                G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"当前疲劳值：{curFatigue}（上局消耗疲劳值非法）")
         self.fatigue = curFatigue
 
         # 如果达到限定的疲劳值，则退出脚本
@@ -2074,8 +2121,16 @@ class Tools:
 
 
 if __name__ == "__main__":
+    # yml = RwYaml()
+    # if yml.file_read_success:
+        #读取配置表成功，才能进行操作
+    #     sp1 = yml.read_value('hsbl', 'p1', 'sleep')
+    #     yml.write_value('hsbl', 'p1', 'sleep', value=1001)
+    # else:
+    #     print(f"配置文件config.yml读取失败！脚本已退出！")
     ui_loader = QUiLoader()  # PySide6的bug，需要在QApplication前先实例这个类
     app = QApplication(sys.argv)  # 创建应用
     GameAutoGUI = Automation()
     GameAutoGUI.ui.show()
     sys.exit(app.exec())  # 开始执行程序，并且进入消息循环等待
+

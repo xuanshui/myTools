@@ -1,5 +1,5 @@
 #本文件是一些参数设置柔柔弱弱外网
-from OPFuncs import OPTime, gameLauncherPath
+from OPFuncs import OPTime, gameLauncherPath, Config_File_Path
 
 #游戏模式：【注】每次修改/新增模式时，记得在函数checkGameMode中进行OCR识别纠错
 GAME_MODE_PVP_WJSL = "无尽试炼"             #无尽试炼
@@ -8,9 +8,6 @@ GAME_MODE_PVE_HMZN = "鸿溟之难"   #PVE征神，鸿溟之难【注：难度�
 GAME_MODE_PVE_WXJL = "万象降临" #PVE征神，万象降临【注：难度为噩梦，英雄只能选宁红夜，魂玉为：沼生、瘴煞、祛毒、蚀骨春/疾凝诀、苍牙元素、神躯/坚甲】
 GAME_MODE_PVE_HSBL = "黄沙百炼"  #PVE征神，黄沙百炼【注：难度为噩 梦，英雄只推荐火炮远程的济沧海，只打第二个小聚点】
 
-#======================================================
-GAME_MODE_CUR = GAME_MODE_PVE_HSBL          #当前游戏模式
-#======================================================
 
 MAX_FATIGUE = 0      #如果达到指定的疲劳值，则脚本退出。如果为0，则不会判断疲劳值。
 
@@ -43,7 +40,7 @@ class ParamTime(OPTime):
     max_InGame_Time_PVE_XMGD = 300  # 小号，没魂玉，预设5分钟
     # default_InGame_TimeUsed_PVE_XMGD = 20   #打一局PVE雪满弓刀-普通难度，最少耗时20秒？要根据神识等级确定
     # 玩家神识1115，BOSS神识820，用时4分19秒/5分8秒（连续冰爆+爆冰决+寒天劲+封霜劲+苍牙元素+天蚕茧）
-    slp_After_Select_Hero = 20000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
+    slp_After_Select_Hero = 32000  # 脚本选好英雄后，休眠一段时间，防止把等待进入游戏的界面识别为过渡界面，导致进入错误界面处理的函数
     walkToEntry = 4000    #从出生点走到传送点，耗时x秒
     walkToRunShift = 1500  # 按住Shift后，开始奔跑的时间。
     holdTimeMin = 1300      #PVE征神的蓄力最短时间
