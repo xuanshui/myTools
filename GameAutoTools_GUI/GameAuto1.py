@@ -9,6 +9,7 @@ from threading import Thread    # 线程相关，防止GUI界面在运行主函�
 import traceback    # 异常处理
 from PySide6.QtCore import Signal,QObject   # 子线程想要使用主线程的变量，必须用信号传递，不然程序必然崩溃。
 
+import OPFuncs
 # from Demos.security.lsastore import retrieveddata
 
 from Settings_Server import *
@@ -107,6 +108,7 @@ class Automation:
             self.conf =  ConfigDict(self.YML.config)  # 从config.yml文件中读取所有的配置信息
             self.conf_base = ConfigDict(self.conf.base) #基本设置
             self.conf_hsbl = ConfigDict({}) #黄沙百炼的设置信息
+            # self.conf_jsls = ConfigDict({}) #静水流深的设置信息
 
             # a = self.conf_dict.hsbl.desktop.p1.sleep
             # b = self.conf_dict.get_nested('hsbl.desktop.p2.move', default=[315,-110])[1]
@@ -220,6 +222,8 @@ class Automation:
         self.ui.btn_end.clicked.connect(self.endScript)  # 立即结束脚本
         self.ui.cBox_gameMode.currentTextChanged.connect(self.save_conf_base)  # 模式、平台发生变化时保存到配置文件
         self.ui.cBox_pcName.currentTextChanged.connect(self.save_conf_base)  # 模式、平台发生变化时保存到配置文件
+        # self.ui.btn_quitKaTui.clicked.connect(self.quitKaTui)  # 卡退，静水流深卡7疲劳退出
+        # self.ui.btn_init.clicked.connect(self.initSelf())  # 卡退，静水流深卡7疲劳退出
 
 
 
@@ -249,6 +253,32 @@ class Automation:
         self.endFlg = True
         self.ui.btn_start.setEnabled(True)  # 使能开始按钮
         self.ui.btn_end.setEnabled(False)  # 禁用停止按钮
+
+    # #全屏时使用，Desktop，2K屏幕
+    # def quitKaTui(self):
+    #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的游戏模式：{self.gameMode}")
+    #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"设置的电脑平台：{self.pcName}")
+    #     G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, "脚本已启动！")
+    #     # 激活游戏窗口
+    #     if OP.SetWindowState(self.hwnd, 12) == 1:  # 激活窗口，显示到前台
+    #         OP.SetWindowState(self.hwnd, 7)
+    #         G_Sig.text_print.emit(self.ui.tEdit_info, LogLevel.info, f"激活窗口成功")
+    #     else:
+    #         G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error, f"激活窗口失败")
+    #     OP.Sleep(500)
+    #     # 按键顺序：①右键单击（打出断厄斩），②ESC，③延时，④移动鼠标到“返回大厅”，左键单击，⑤延时，⑥点按空格
+    #     MouseOp.RightClickNow()  # 1、右键单击（打出断厄斩）
+    #     OP.Sleep(300)
+    #     MouseOp.RightClickNow()  # 1、右键单击（打出断厄斩）
+    #     OP.Sleep(300)
+    #     KeyOp.PressKey(OPKeyCode.ESC)  # 2、ESC
+    #     OP.Sleep(self.conf_jsls.get_nested('sleep1', default=200))  # 3、延时
+    #     MouseOp.LeftClickAreaRandom(  # 4、移动到返回大厅并左键单击
+    #         self.conf_jsls.get_nested('AreaReturnHome', default=[1183, 994, 1358, 1033]),
+    #         self.ratio)
+    #     OP.Sleep(self.conf_jsls.get_nested('sleep1', default=200))  # 5、延时
+    #     KeyOp.PressKey(OPKeyCode.Space)  # 6、点按空格
+
 
 
     # ——GUI相关函数：显示信息——
@@ -343,27 +373,37 @@ class Automation:
             self.conf = ConfigDict(self.YML.config)  # 从config.yml文件中读取所有的配置信息
             self.conf_base = ConfigDict(self.conf.base)  # 基本设置
             self.conf_hsbl = ConfigDict({})  # 黄沙百炼的设置信息
+            # self.conf_jsls = ConfigDict({})  # 静水流深的设置信息
             # 从配置文件中获取电脑平台、游戏模式，并更新到UI交互界面
             self.pcName = self.conf_base.get_nested("pc_name")
             self.gameMode = self.conf_base.get_nested("game_mode")
         # 根据不同的电脑平台获取不同的设置信息
         if self.pcName == PC_Desktop:
             self.conf_hsbl = ConfigDict(self.conf.hsbl.desktop)  # 黄沙百炼-Desktop的配置信息
+            # self.conf_jsls = ConfigDict(self.conf.jsls.desktop)  # 静水流深的设置信息
         elif self.pcName == PC_ThinkBook16P:
             self.conf_hsbl = ConfigDict(self.conf.hsbl.thinkbook16p)  # 黄沙百炼-Desktop的配置信息
+            # self.conf_jsls = ConfigDict(self.conf.jsls.thinkbook16p)  # 静水流深的设置信息
         elif self.pcName == PC_WuJie14X:
             self.conf_hsbl = ConfigDict(self.conf.hsbl.wujie14x)  # 黄沙百炼-Desktop的配置信息
+            # self.conf_jsls = ConfigDict(self.conf.jsls.wujie14x)  # 静水流深的设置信息
         else:
             self.conf_hsbl = {}
+            # self.conf_jsls = {}
             G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
                                   f"当前平台（{self.pcName}）不在脚本范围内，脚本已退出。")
             self.endScript()
             return False
         if self.conf_hsbl == {}:
             G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
-                                  f"获取配置表为空，脚本已退出。")
+                                  f"获取【黄沙百炼】配置表为空，脚本已退出。")
             self.endScript()
             return False
+        # if self.conf_jsls == {}:
+        #     G_Sig.text_print.emit(self.ui.tEdit_errInfo, LogLevel.error,
+        #                           f"获取【静水流深】配置表为空，脚本已退出。")
+        #     self.endScript()
+        #     return False
         # 设置的游戏模式
 
         if self.pcName == "":

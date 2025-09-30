@@ -82,7 +82,7 @@
    <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>392</x>
+      <x>266</x>
       <y>576</y>
       <width>16</width>
       <height>16</height>
@@ -93,10 +93,10 @@
    <widget class="QPushButton" name="btn_start">
     <property name="geometry">
      <rect>
-      <x>147</x>
+      <x>21</x>
       <y>576</y>
       <width>75</width>
-      <height>24</height>
+      <height>41</height>
      </rect>
     </property>
     <property name="text">
@@ -106,10 +106,10 @@
    <widget class="QPushButton" name="btn_pause">
     <property name="geometry">
      <rect>
-      <x>282</x>
+      <x>156</x>
       <y>576</y>
       <width>104</width>
-      <height>24</height>
+      <height>41</height>
      </rect>
     </property>
     <property name="text">
@@ -119,17 +119,17 @@
    <widget class="QPushButton" name="btn_end">
     <property name="geometry">
      <rect>
-      <x>446</x>
+      <x>320</x>
       <y>576</y>
       <width>75</width>
-      <height>24</height>
+      <height>41</height>
      </rect>
     </property>
     <property name="text">
      <string>结束</string>
     </property>
    </widget>
-   <widget class="QWidget" name="">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
       <x>16</x>
@@ -362,6 +362,32 @@
       </layout>
      </item>
     </layout>
+   </widget>
+   <widget class="QPushButton" name="btn_quitKaTui">
+    <property name="geometry">
+     <rect>
+      <x>580</x>
+      <y>570</y>
+      <width>81</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>卡退</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btn_init">
+    <property name="geometry">
+     <rect>
+      <x>460</x>
+      <y>580</y>
+      <width>75</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>初始化</string>
+    </property>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
